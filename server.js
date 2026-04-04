@@ -12,7 +12,7 @@ const pool = new Pool({
 
 const TARGET_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
-// 🔥 TABLO OLUŞTUR (otomatik)
+// DB
 async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
@@ -23,17 +23,15 @@ async function initDB() {
   `);
 }
 
-// 🔥 VERİ ÇEK
+// SCRAPER
 async function fetchAndSave() {
   try {
     const { data } = await axios.get(TARGET_URL);
     const $ = cheerio.load(data);
-
     const rows = $("table tr");
 
     for (let i = 1; i < rows.length; i++) {
       const cols = $(rows[i]).find("td");
-
       if (cols.length < 8) continue;
 
       const nick = $(cols[1]).text().trim();
@@ -54,17 +52,22 @@ async function fetchAndSave() {
 
     console.log("✔ Veri güncellendi");
   } catch (err) {
-    console.error("❌ HATA:", err.message);
+    console.error("❌ SCRAPER HATA:", err.message);
   }
 }
 
-// 🌐 WEB
+// 🌐 PAGINATION
 app.get("/", async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = 50;
+  const offset = (page - 1) * limit;
+
   const result = await pool.query(`
     SELECT *
     FROM players
     ORDER BY total_score DESC
-  `);
+    LIMIT $1 OFFSET $2
+  `, [limit, offset]);
 
   let html = `
   <html>
@@ -75,6 +78,8 @@ app.get("/", async (req, res) => {
       table { width:80%; margin:auto; border-collapse:collapse; }
       td, th { padding:10px; border-bottom:1px solid #333; text-align:center; }
       h1 { text-align:center; }
+      .nav { text-align:center; margin:20px; }
+      a { color:#0af; margin:10px; }
     </style>
   </head>
   <body>
@@ -91,7 +96,7 @@ app.get("/", async (req, res) => {
   result.rows.forEach((p, i) => {
     html += `
       <tr>
-        <td>${i + 1}</td>
+        <td>${offset + i + 1}</td>
         <td>${p.nick}</td>
         <td>${p.total_score}</td>
         <td>${p.last_score}</td>
@@ -99,12 +104,23 @@ app.get("/", async (req, res) => {
     `;
   });
 
-  html += "</table></body></html>";
+  html += `
+    </table>
+
+    <div class="nav">
+      <a href="/?page=${page - 1}">← Önceki</a>
+      <span>Sayfa ${page}</span>
+      <a href="/?page=${page + 1}">Sonraki →</a>
+    </div>
+
+  </body>
+  </html>
+  `;
 
   res.send(html);
 });
 
-// 🚀 BAŞLAT
+// START
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
