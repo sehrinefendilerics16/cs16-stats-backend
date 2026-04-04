@@ -12,18 +12,20 @@ const pool = new Pool({
 
 const TARGET_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
-// DB
+// DB INIT
 async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
       nick TEXT PRIMARY KEY,
-      total_score INTEGER DEFAULT 0,
-      last_score INTEGER DEFAULT 0
+      total_kills INTEGER DEFAULT 0,
+      total_damage INTEGER DEFAULT 0,
+      last_kills INTEGER DEFAULT 0,
+      last_damage INTEGER DEFAULT 0
     );
   `);
 }
 
-// SCRAPER
+// DELTA SCRAPER
 async function fetchAndSave() {
   try {
     const { data } = await axios.get(TARGET_URL);
@@ -40,34 +42,66 @@ async function fetchAndSave() {
 
       if (!nick) continue;
 
-      await pool.query(`
-        INSERT INTO players (nick, total_score, last_score)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (nick)
-        DO UPDATE SET
-          total_score = EXCLUDED.total_score,
-          last_score = EXCLUDED.last_score
-      `, [nick, damage, kills]);
+      const existing = await pool.query(
+        "SELECT * FROM players WHERE nick = $1",
+        [nick]
+      );
+
+      if (existing.rows.length === 0) {
+        // İlk kayıt
+        await pool.query(`
+          INSERT INTO players (nick, total_kills, total_damage, last_kills, last_damage)
+          VALUES ($1, $2, $3, $2, $3)
+        `, [nick, kills, damage]);
+
+      } else {
+        const p = existing.rows[0];
+
+        let deltaKills = 0;
+        let deltaDamage = 0;
+
+        // KILL DELTA
+        if (kills >= p.last_kills) {
+          deltaKills = kills - p.last_kills;
+        } else {
+          // RESET olmuş
+          deltaKills = kills;
+        }
+
+        // DAMAGE DELTA
+        if (damage >= p.last_damage) {
+          deltaDamage = damage - p.last_damage;
+        } else {
+          deltaDamage = damage;
+        }
+
+        await pool.query(`
+          UPDATE players
+          SET
+            total_kills = total_kills + $2,
+            total_damage = total_damage + $3,
+            last_kills = $4,
+            last_damage = $5
+          WHERE nick = $1
+        `, [nick, deltaKills, deltaDamage, kills, damage]);
+      }
     }
 
-    console.log("✔ Veri güncellendi");
+    console.log("✔ Delta veri işlendi");
   } catch (err) {
-    console.error("❌ SCRAPER HATA:", err.message);
+    console.error("❌ HATA:", err.message);
   }
 }
 
-// 🌐 PAGINATION
+// RANK SAYFA
 app.get("/", async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = 50;
-  const offset = (page - 1) * limit;
-
   const result = await pool.query(`
-    SELECT *
+    SELECT *,
+    (total_kills * 2 + total_damage / 100) AS rank_score
     FROM players
-    ORDER BY total_score DESC
-    LIMIT $1 OFFSET $2
-  `, [limit, offset]);
+    ORDER BY rank_score DESC
+    LIMIT 100
+  `);
 
   let html = `
   <html>
@@ -78,44 +112,33 @@ app.get("/", async (req, res) => {
       table { width:80%; margin:auto; border-collapse:collapse; }
       td, th { padding:10px; border-bottom:1px solid #333; text-align:center; }
       h1 { text-align:center; }
-      .nav { text-align:center; margin:20px; }
-      a { color:#0af; margin:10px; }
     </style>
   </head>
   <body>
-    <h1>CS 1.6 GENEL RANK</h1>
+    <h1>DELTA RANK SİSTEMİ</h1>
     <table>
       <tr>
         <th>#</th>
         <th>Nick</th>
-        <th>Total Score</th>
-        <th>Last Score</th>
+        <th>Total Kill</th>
+        <th>Total Damage</th>
+        <th>Rank</th>
       </tr>
   `;
 
   result.rows.forEach((p, i) => {
     html += `
       <tr>
-        <td>${offset + i + 1}</td>
+        <td>${i + 1}</td>
         <td>${p.nick}</td>
-        <td>${p.total_score}</td>
-        <td>${p.last_score}</td>
+        <td>${p.total_kills}</td>
+        <td>${p.total_damage}</td>
+        <td>${Math.floor(p.rank_score)}</td>
       </tr>
     `;
   });
 
-  html += `
-    </table>
-
-    <div class="nav">
-      <a href="/?page=${page - 1}">← Önceki</a>
-      <span>Sayfa ${page}</span>
-      <a href="/?page=${page + 1}">Sonraki →</a>
-    </div>
-
-  </body>
-  </html>
-  `;
+  html += `</table></body></html>`;
 
   res.send(html);
 });
@@ -130,5 +153,5 @@ app.listen(PORT, async () => {
   console.log("DB hazır");
 
   await fetchAndSave();
-  setInterval(fetchAndSave, 60000);
+  setInterval(fetchAndSave, 60000); // 1 dk
 });
