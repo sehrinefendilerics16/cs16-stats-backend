@@ -6,17 +6,21 @@ const app = express();
 
 app.get("/rank", async (req, res) => {
   try {
-    const response = await axios.get("PANEL_URL_BURAYA");
+    const url = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
+    const response = await axios.get(url);
     const html = response.data;
+
     const $ = cheerio.load(html);
 
     let players = [];
 
     $("table tbody tr").each((i, el) => {
-      const rank = $(el).find("td").eq(0).text().trim();
-      const nick = $(el).find("td").eq(1).text().trim();
-      const score = $(el).find("td").eq(2).text().trim();
+      const tds = $(el).find("td");
+
+      const rank = $(tds[0]).text().trim();
+      const nick = $(tds[1]).text().trim();
+      const score = $(tds[2]).text().trim();
 
       players.push({ rank, nick, score });
     });
