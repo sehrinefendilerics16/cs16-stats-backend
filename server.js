@@ -112,3 +112,9 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server calisiyor:", PORT);
 });
+app.get("/players", async (req, res) => {
+  const result = await pool.query(
+    "SELECT * FROM players ORDER BY total_score DESC LIMIT 20"
+  );
+  res.json(result.rows);
+});
