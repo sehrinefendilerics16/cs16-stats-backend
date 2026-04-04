@@ -9,9 +9,10 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// 🔥 TABLO OLUŞTUR (DOĞRU YAPI)
+// 🔥 TABLO + COLUMN GARANTİ
 (async () => {
   try {
+    // tablo oluştur
     await pool.query(`
       CREATE TABLE IF NOT EXISTS players (
         id SERIAL PRIMARY KEY,
@@ -20,13 +21,20 @@ const pool = new Pool({
         last_score INT DEFAULT 0
       );
     `);
+
+    // eksik column varsa ekle (KRİTİK)
+    await pool.query(`
+      ALTER TABLE players
+      ADD COLUMN IF NOT EXISTS last_score INT DEFAULT 0;
+    `);
+
     console.log("DB hazır");
   } catch (err) {
     console.error("DB hata:", err.message);
   }
 })();
 
-// 🔥 ANA SİSTEM (DELTA MANTIK)
+// 🔥 DELTA SİSTEM
 app.get("/rank", async (req, res) => {
   try {
     const url =
