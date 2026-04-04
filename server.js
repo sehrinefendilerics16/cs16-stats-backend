@@ -8,6 +8,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// ANA SAYFA
 app.get("/", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -76,6 +77,20 @@ app.get("/", async (req, res) => {
     `;
 
     res.send(html);
+  } catch (err) {
+    res.send(err.message);
+  }
+});
+
+// DB FIX (GEÇİCİ)
+app.get("/fix-db", async (req, res) => {
+  try {
+    await pool.query(`
+      ALTER TABLE players
+      ADD COLUMN IF NOT EXISTS last_score INTEGER DEFAULT 0;
+    `);
+
+    res.send("DB düzeltildi");
   } catch (err) {
     res.send(err.message);
   }
