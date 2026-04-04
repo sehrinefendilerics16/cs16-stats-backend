@@ -1,7 +1,21 @@
+const express = require("express");
+const { Pool } = require("pg");
+
+const app = express();
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
 app.get("/", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT *
+      SELECT 
+        id,
+        nick,
+        total_score,
+        COALESCE(last_score, 0) as last_score
       FROM players
       WHERE total_score > 0
       AND length(nick) > 2
@@ -65,4 +79,10 @@ app.get("/", async (req, res) => {
   } catch (err) {
     res.send(err.message);
   }
+});
+
+const PORT = process.env.PORT || 10000;
+
+app.listen(PORT, () => {
+  console.log("Server çalışıyor:", PORT);
 });
