@@ -1,143 +1,143 @@
 const express = require("express");
-const axios = require("axios");
-const cheerio = require("cheerio");
 const { Pool } = require("pg");
 
 const app = express();
+const port = process.env.PORT || 10000;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
-// DB setup
-(async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS players (
-      id SERIAL PRIMARY KEY,
-      nick TEXT UNIQUE,
-      total_score INT DEFAULT 0,
-      last_score INT DEFAULT 0
-    );
-  `);
+app.use(express.json());
 
-  await pool.query(`
-    ALTER TABLE players
-    ADD COLUMN IF NOT EXISTS last_score INT DEFAULT 0;
-  `);
+/*
+  ANA SAYFA (UI)
+*/
+app.get("/", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT *
+      FROM players
+      ORDER BY total_score DESC, last_score DESC
+    `);
 
-  console.log("DB hazır");
-})();
+    let html = `
+    <html>
+    <head>
+      <title>CS 1.6 Rank</title>
+      <style>
+        body {
+          background: #0d0d0d;
+          color: #fff;
+          font-family: Arial;
+        }
+        h1 {
+          text-align: center;
+        }
+        table {
+          width: 80%;
+          margin: auto;
+          border-collapse: collapse;
+        }
+        th, td {
+          padding: 10px;
+          border-bottom: 1px solid #333;
+          text-align: center;
+        }
+        tr:hover {
+          background: #1a1a1a;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>CS 1.6 GENEL RANK</h1>
+      <table>
+        <tr>
+          <th>#</th>
+          <th>Nick</th>
+          <th>Total Score</th>
+          <th>Last Score</th>
+        </tr>
+    `;
 
-// VERİ ÇEK + KAYDET
+    result.rows.forEach((player, index) => {
+      html += `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${player.nick}</td>
+          <td>${player.total_score}</td>
+          <td>${player.last_score}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+      </table>
+    </body>
+    </html>
+    `;
+
+    res.send(html);
+  } catch (err) {
+    res.send(err.message);
+  }
+});
+
+/*
+  TÜM OYUNCULAR (JSON)
+*/
+app.get("/players", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT *
+      FROM players
+      ORDER BY total_score DESC, last_score DESC
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+/*
+  SCORE UPDATE (PLUGIN BURAYA POST ATACAK)
+*/
 app.get("/rank", async (req, res) => {
-  const url =
-    "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
+  try {
+    const nick = req.query.nick;
+    const score = parseInt(req.query.score);
 
-  const response = await axios.get(url);
-  const html = response.data;
-
-  const $ = cheerio.load(html);
-
-  let players = [];
-
-  $("table tbody tr").each((i, el) => {
-    const tds = $(el).find("td");
-
-    const nick = $(tds[1]).text().trim();
-    const score = parseInt($(tds[2]).text().trim()) || 0;
-
-    if (nick) {
-      players.push({ nick, score });
+    if (!nick || isNaN(score)) {
+      return res.send("hatalı veri");
     }
-  });
 
-  for (let p of players) {
-    const result = await pool.query(
+    const player = await pool.query(
       "SELECT * FROM players WHERE nick = $1",
-      [p.nick]
+      [nick]
     );
 
-    if (result.rows.length === 0) {
+    if (player.rows.length === 0) {
       await pool.query(
-        `INSERT INTO players (nick, total_score, last_score)
-         VALUES ($1, $2, $2)`,
-        [p.nick, p.score]
+        "INSERT INTO players (nick, total_score, last_score) VALUES ($1, $2, $3)",
+        [nick, score, score]
       );
     } else {
-      const player = result.rows[0];
-
-      let fark = 0;
-
-      if (p.score >= player.last_score) {
-        fark = p.score - player.last_score;
-      } else {
-        fark = p.score;
-      }
-
       await pool.query(
-        `UPDATE players
-         SET total_score = total_score + $1,
-             last_score = $2
-         WHERE nick = $3`,
-        [fark, p.score, p.nick]
+        "UPDATE players SET total_score = total_score + $1, last_score = $1 WHERE nick = $2",
+        [score, nick]
       );
     }
+
+    res.send("veri güncellendi");
+  } catch (err) {
+    res.send(err.message);
   }
-
-  res.send("veri güncellendi");
 });
 
-// 🔥 HTML TABLO (ASIL OLAY)
-app.get("/", async (req, res) => {
-  const result = await pool.query(
-    "SELECT * FROM players ORDER BY total_score DESC LIMIT 50"
-  );
-
-  let html = `
-  <html>
-  <head>
-    <title>CS 1.6 Rank</title>
-    <style>
-      body { background:#111; color:#fff; font-family:Arial; }
-      table { width:80%; margin:auto; border-collapse:collapse; }
-      th, td { padding:10px; border:1px solid #333; text-align:center; }
-      th { background:#222; }
-      tr:nth-child(even){ background:#1a1a1a; }
-      h1 { text-align:center; }
-    </style>
-  </head>
-  <body>
-
-  <h1>CS 1.6 GENEL RANK</h1>
-  <table>
-    <tr>
-      <th>#</th>
-      <th>Nick</th>
-      <th>Total Score</th>
-    </tr>
-  `;
-
-  result.rows.forEach((p, i) => {
-    html += `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${p.nick}</td>
-        <td>${p.total_score}</td>
-      </tr>
-    `;
-  });
-
-  html += `
-    </table>
-  </body>
-  </html>
-  `;
-
-  res.send(html);
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("Server çalışıyor:", PORT);
+app.listen(port, () => {
+  console.log("Server çalışıyor:", port);
 });
