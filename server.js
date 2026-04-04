@@ -13,7 +13,7 @@ app.get("/rank", async (req, res) => {
 
     const $ = cheerio.load(html);
 
-    let players = [];
+    let rows = "";
 
     $("table tbody tr").each((i, el) => {
       const tds = $(el).find("td");
@@ -22,10 +22,40 @@ app.get("/rank", async (req, res) => {
       const nick = $(tds[1]).text().trim();
       const score = $(tds[2]).text().trim();
 
-      players.push({ rank, nick, score });
+      rows += `
+        <tr>
+          <td>${rank}</td>
+          <td>${nick}</td>
+          <td>${score}</td>
+        </tr>
+      `;
     });
 
-    res.json(players);
+    res.send(`
+      <html>
+      <head>
+        <title>CS 1.6 Rank</title>
+        <style>
+          body { font-family: Arial; background: #111; color: #fff; }
+          table { width: 80%; margin: auto; border-collapse: collapse; }
+          th, td { padding: 10px; border: 1px solid #444; text-align: center; }
+          th { background: #222; }
+        </style>
+      </head>
+      <body>
+        <h2 style="text-align:center;">CS 1.6 Rank Listesi</h2>
+        <table>
+          <tr>
+            <th>Sıra</th>
+            <th>Oyuncu</th>
+            <th>Puan</th>
+          </tr>
+          ${rows}
+        </table>
+      </body>
+      </html>
+    `);
+
   } catch (err) {
     res.status(500).send("Hata: " + err.message);
   }
