@@ -1,4 +1,6 @@
 const express = require("express");
+const axios = require("axios");
+const cheerio = require("cheerio");
 const { Pool } = require("pg");
 
 const app = express();
@@ -8,96 +10,109 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// ANA SAYFA
+const TARGET_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
+
+// 🔥 TABLO OLUŞTUR (otomatik)
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS players (
+      nick TEXT PRIMARY KEY,
+      total_score INTEGER DEFAULT 0,
+      last_score INTEGER DEFAULT 0
+    );
+  `);
+}
+
+// 🔥 VERİ ÇEK
+async function fetchAndSave() {
+  try {
+    const { data } = await axios.get(TARGET_URL);
+    const $ = cheerio.load(data);
+
+    const rows = $("table tr");
+
+    for (let i = 1; i < rows.length; i++) {
+      const cols = $(rows[i]).find("td");
+
+      if (cols.length < 8) continue;
+
+      const nick = $(cols[1]).text().trim();
+      const kills = parseInt($(cols[2]).text()) || 0;
+      const damage = parseInt($(cols[7]).text()) || 0;
+
+      if (!nick) continue;
+
+      await pool.query(`
+        INSERT INTO players (nick, total_score, last_score)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (nick)
+        DO UPDATE SET
+          total_score = EXCLUDED.total_score,
+          last_score = EXCLUDED.last_score
+      `, [nick, damage, kills]);
+    }
+
+    console.log("✔ Veri güncellendi");
+  } catch (err) {
+    console.error("❌ HATA:", err.message);
+  }
+}
+
+// 🌐 WEB
 app.get("/", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        id,
-        nick,
-        total_score,
-        COALESCE(last_score, 0) as last_score
-      FROM players
-      WHERE total_score > 0
-      AND length(nick) > 2
-      ORDER BY total_score DESC, last_score DESC
-    `);
+  const result = await pool.query(`
+    SELECT *
+    FROM players
+    ORDER BY total_score DESC
+  `);
 
-    let html = `
-    <html>
-    <head>
-      <title>CS 1.6 Rank</title>
-      <style>
-        body {
-          background: #0d0d0d;
-          color: #fff;
-          font-family: Arial;
-        }
-        h1 {
-          text-align: center;
-        }
-        table {
-          width: 80%;
-          margin: auto;
-          border-collapse: collapse;
-        }
-        th, td {
-          padding: 10px;
-          border-bottom: 1px solid #333;
-          text-align: center;
-        }
-      </style>
-    </head>
-    <body>
-      <h1>CS 1.6 GENEL RANK</h1>
-      <table>
-        <tr>
-          <th>#</th>
-          <th>Nick</th>
-          <th>Total Score</th>
-          <th>Last Score</th>
-        </tr>
-    `;
+  let html = `
+  <html>
+  <head>
+    <title>CS 1.6 Rank</title>
+    <style>
+      body { background:#000; color:#fff; font-family:Arial; }
+      table { width:80%; margin:auto; border-collapse:collapse; }
+      td, th { padding:10px; border-bottom:1px solid #333; text-align:center; }
+      h1 { text-align:center; }
+    </style>
+  </head>
+  <body>
+    <h1>CS 1.6 GENEL RANK</h1>
+    <table>
+      <tr>
+        <th>#</th>
+        <th>Nick</th>
+        <th>Total Score</th>
+        <th>Last Score</th>
+      </tr>
+  `;
 
-    result.rows.forEach((player, index) => {
-      html += `
-        <tr>
-          <td>${index + 1}</td>
-          <td>${player.nick}</td>
-          <td>${player.total_score}</td>
-          <td>${player.last_score}</td>
-        </tr>
-      `;
-    });
-
+  result.rows.forEach((p, i) => {
     html += `
-      </table>
-    </body>
-    </html>
+      <tr>
+        <td>${i + 1}</td>
+        <td>${p.nick}</td>
+        <td>${p.total_score}</td>
+        <td>${p.last_score}</td>
+      </tr>
     `;
+  });
 
-    res.send(html);
-  } catch (err) {
-    res.send(err.message);
-  }
+  html += "</table></body></html>";
+
+  res.send(html);
 });
 
-// DB FIX (GEÇİCİ)
-app.get("/fix-db", async (req, res) => {
-  try {
-    await pool.query(`
-      ALTER TABLE players
-      ADD COLUMN IF NOT EXISTS last_score INTEGER DEFAULT 0;
-    `);
+// 🚀 BAŞLAT
+const PORT = process.env.PORT || 3000;
 
-    res.send("DB düzeltildi");
-  } catch (err) {
-    res.send(err.message);
-  }
-});
-
-const PORT = process.env.PORT || 10000;
-
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log("Server çalışıyor:", PORT);
+
+  await initDB();
+  console.log("DB hazır");
+
+  await fetchAndSave();
+  setInterval(fetchAndSave, 60000);
 });
