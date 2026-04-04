@@ -1,26 +1,10 @@
-const express = require("express");
-const { Pool } = require("pg");
-
-const app = express();
-const port = process.env.PORT || 10000;
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
-
-app.use(express.json());
-
-/*
-  ANA SAYFA (UI)
-*/
 app.get("/", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT *
       FROM players
+      WHERE total_score > 0
+      AND length(nick) > 2
       ORDER BY total_score DESC, last_score DESC
     `);
 
@@ -46,9 +30,6 @@ app.get("/", async (req, res) => {
           padding: 10px;
           border-bottom: 1px solid #333;
           text-align: center;
-        }
-        tr:hover {
-          background: #1a1a1a;
         }
       </style>
     </head>
@@ -84,60 +65,4 @@ app.get("/", async (req, res) => {
   } catch (err) {
     res.send(err.message);
   }
-});
-
-/*
-  TÜM OYUNCULAR (JSON)
-*/
-app.get("/players", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT *
-      FROM players
-      ORDER BY total_score DESC, last_score DESC
-    `);
-
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-/*
-  SCORE UPDATE (PLUGIN BURAYA POST ATACAK)
-*/
-app.get("/rank", async (req, res) => {
-  try {
-    const nick = req.query.nick;
-    const score = parseInt(req.query.score);
-
-    if (!nick || isNaN(score)) {
-      return res.send("hatalı veri");
-    }
-
-    const player = await pool.query(
-      "SELECT * FROM players WHERE nick = $1",
-      [nick]
-    );
-
-    if (player.rows.length === 0) {
-      await pool.query(
-        "INSERT INTO players (nick, total_score, last_score) VALUES ($1, $2, $3)",
-        [nick, score, score]
-      );
-    } else {
-      await pool.query(
-        "UPDATE players SET total_score = total_score + $1, last_score = $1 WHERE nick = $2",
-        [score, nick]
-      );
-    }
-
-    res.send("veri güncellendi");
-  } catch (err) {
-    res.send(err.message);
-  }
-});
-
-app.listen(port, () => {
-  console.log("Server çalışıyor:", port);
 });
