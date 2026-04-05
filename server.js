@@ -12,6 +12,34 @@ const pool = new Pool({
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
+// ================= DB INIT =================
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS players (
+      id SERIAL PRIMARY KEY,
+      nick TEXT UNIQUE,
+      total_kills INT DEFAULT 0,
+      total_deaths INT DEFAULT 0,
+      total_damage INT DEFAULT 0,
+      last_kills INT DEFAULT 0,
+      last_deaths INT DEFAULT 0,
+      last_damage INT DEFAULT 0,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS player_history (
+      id SERIAL PRIMARY KEY,
+      nick TEXT,
+      kills INT,
+      deaths INT,
+      damage INT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+}
+
 // ================= SCRAPER =================
 async function fetchPlayers() {
   const { data } = await axios.get(BASE_URL);
@@ -82,7 +110,7 @@ async function fetchAndSave() {
       `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
     }
 
-    // 🔥 HISTORY (5 DK'DA 1)
+    // 🔥 HER 5 DAKİKA HISTORY
     if (new Date().getMinutes() % 5 === 0) {
       await pool.query(`
         INSERT INTO player_history (nick, kills, deaths, damage)
@@ -121,68 +149,24 @@ app.get("/", async (req, res) => {
   <html>
   <head>
   <title>SEHRIN EFENDILERI</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-
   body { background:#0f172a;color:white;font-family:Arial;margin:0; }
+  h1 { text-align:center;padding:20px;background:#020617;margin:0; }
 
-  h1 {
-    text-align:center;
-    padding:20px;
-    background:#020617;
-    margin:0;
-  }
+  .search { text-align:center;margin:20px; }
 
-  .search {
-    text-align:center;
-    margin:20px;
-  }
-
-  .search input {
-    padding:10px;
-    width:250px;
-    border-radius:8px;
-    border:none;
-  }
-
-  .search button {
-    padding:10px;
-    border:none;
-    border-radius:8px;
-    background:#38bdf8;
-    cursor:pointer;
-  }
-
-  .top3 {
-    display:flex;
-    justify-content:center;
-    gap:20px;
-  }
-
-  .card {
-    padding:20px;
-    border-radius:12px;
-    width:200px;
-    text-align:center;
-    font-weight:bold;
-  }
-
-  .gold { background:#facc15; color:black; }
-  .silver { background:#e5e7eb; color:black; }
-  .bronze { background:#fb923c; color:black; }
+  input { padding:10px;border-radius:8px;border:none; }
+  button { padding:10px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer; }
 
   table { width:95%; margin:auto; border-collapse:collapse; }
-
-  th { background:#1e293b; padding:10px; }
-  td { padding:8px; text-align:center; border-bottom:1px solid #334155; }
-
-  tr:nth-child(even){ background:#020617; }
-  tr:hover { background:#1e293b; }
+  th { background:#1e293b;padding:10px; }
+  td { padding:8px;text-align:center;border-bottom:1px solid #334155; }
 
   .kd-good { color:#22c55e; }
   .kd-bad { color:#ef4444; }
 
   a { color:#38bdf8; text-decoration:none; }
-
   </style>
   </head>
 
@@ -195,21 +179,9 @@ app.get("/", async (req, res) => {
     <button>Bul</button>
   </form>
 
-  <div class="top3">
-    <div class="card silver">🥈 ${top3[1]?.nick || ""}</div>
-    <div class="card gold">🥇 ${top3[0]?.nick || ""}</div>
-    <div class="card bronze">🥉 ${top3[2]?.nick || ""}</div>
-  </div>
-
   <table>
   <tr>
-    <th>#</th>
-    <th>Nick</th>
-    <th>Kill</th>
-    <th>Death</th>
-    <th>K/D</th>
-    <th>Damage</th>
-    <th>Rank</th>
+    <th>#</th><th>Nick</th><th>Kill</th><th>Death</th><th>K/D</th><th>Damage</th><th>Rank</th>
   </tr>
   `;
 
@@ -246,14 +218,7 @@ app.get("/player/:nick", async (req, res) => {
   if (player.rows.length === 0) return res.send("Oyuncu yok");
 
   const p = player.rows[0];
-
   const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
-
-  let level = "🟡 Ortalama";
-  if (kd >= 2.5) level = "👑 Efsane";
-  else if (kd >= 2) level = "🔥 Elit";
-  else if (kd >= 1.2) level = "⚔️ İyi";
-  else if (kd < 0.8) level = "💀 Zayıf";
 
   const tarih = new Date(p.updated_at).toLocaleString("tr-TR", {
     timeZone: "Europe/Istanbul"
@@ -263,43 +228,10 @@ app.get("/player/:nick", async (req, res) => {
   <html>
   <head>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
-
-  body { background:#f1f5f9; font-family:Arial; }
-
-  .container { max-width:1100px; margin:auto; padding:20px; }
-
-  .header {
-    background:#020617;
-    color:white;
-    padding:40px;
-    border-radius:16px;
-    text-align:center;
-  }
-
-  .grid {
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:20px;
-    margin-top:20px;
-  }
-
-  .card {
-    background:white;
-    padding:25px;
-    border-radius:14px;
-    text-align:center;
-  }
-
-  .big {
-    grid-column:span 3;
-    background:#020617;
-    color:white;
-  }
-
-  .big .value { font-size:60px; }
-
+  body { background:#f1f5f9;font-family:Arial; }
+  .container { max-width:900px;margin:auto;padding:20px; }
+  .card { background:white;padding:20px;margin:10px;border-radius:10px;text-align:center; }
   </style>
   </head>
 
@@ -307,34 +239,20 @@ app.get("/player/:nick", async (req, res) => {
 
   <div class="container">
 
-    <div class="header">
-      <h1>${nick}</h1>
-      <div>${level}</div>
-    </div>
+    <h2>${nick}</h2>
 
-    <div class="grid">
+    <div class="card">Kill: ${p.total_kills}</div>
+    <div class="card">Death: ${p.total_deaths}</div>
+    <div class="card">K/D: ${kd}</div>
 
-      <div class="card">Kill<br><b>${p.total_kills}</b></div>
-      <div class="card">Death<br><b>${p.total_deaths}</b></div>
+    <canvas id="chart"></canvas>
 
-      <div class="card big">K/D<br><div class="value">${kd}</div></div>
-
-      <div class="card">Damage<br><b>${p.total_damage}</b></div>
-      <div class="card">Rank<br><b>${p.total_kills - p.total_deaths}</b></div>
-      <div class="card">Durum<br><b>${level}</b></div>
-
-    </div>
-
-    <canvas id="chart" height="100"></canvas>
-
-    <p style="text-align:center;">Son Güncelleme: ${tarih}</p>
+    <p>Son Güncelleme: ${tarih}</p>
 
   </div>
 
   <script>
-
   const data = ${JSON.stringify(history.rows)};
-
   const labels = data.map(x => new Date(x.created_at).toLocaleTimeString("tr-TR"));
   const kills = data.map(x => x.kills);
 
@@ -342,14 +260,9 @@ app.get("/player/:nick", async (req, res) => {
     type: "line",
     data: {
       labels,
-      datasets: [{
-        label: "Kill Gelişimi",
-        data: kills,
-        borderColor: "#38bdf8"
-      }]
+      datasets: [{ label: "Kill", data: kills }]
     }
   });
-
   </script>
 
   </body>
@@ -362,6 +275,9 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
   console.log("Server çalıştı:", PORT);
+
+  await initDB(); // 🔥 EN KRİTİK SATIR
+
   await fetchAndSave();
   setInterval(fetchAndSave, 60000);
 });
