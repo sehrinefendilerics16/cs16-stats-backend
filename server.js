@@ -1,5 +1,3 @@
-require('./setup'); // SADECE İLK ÇALIŞTIRMADA GEREKLİ (SONRA SİLECEĞİZ)
-
 const express = require("express");
 const axios = require("axios");
 const cheerio = require("cheerio");
@@ -86,52 +84,57 @@ async function fetchAndSave() {
 
 // RANK SAYFA
 app.get("/", async (req, res) => {
-  const result = await pool.query(`
-    SELECT *,
-    (total_kills * 2 + total_damage / 100) AS rank_score
-    FROM players
-    ORDER BY rank_score DESC
-    LIMIT 100
-  `);
+  try {
+    const result = await pool.query(`
+      SELECT *,
+      (total_kills * 2 + total_damage / 100) AS rank_score
+      FROM players
+      ORDER BY rank_score DESC
+      LIMIT 100
+    `);
 
-  let html = `
-  <html>
-  <head>
-    <title>CS 1.6 Rank</title>
-    <style>
-      body { background:#000; color:#fff; font-family:Arial; }
-      table { width:80%; margin:auto; border-collapse:collapse; }
-      td, th { padding:10px; border-bottom:1px solid #333; text-align:center; }
-      h1 { text-align:center; }
-    </style>
-  </head>
-  <body>
-    <h1>DELTA RANK SİSTEMİ</h1>
-    <table>
-      <tr>
-        <th>#</th>
-        <th>Nick</th>
-        <th>Total Kill</th>
-        <th>Total Damage</th>
-        <th>Rank</th>
-      </tr>
-  `;
-
-  result.rows.forEach((p, i) => {
-    html += `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${p.nick}</td>
-        <td>${p.total_kills}</td>
-        <td>${p.total_damage}</td>
-        <td>${Math.floor(p.rank_score)}</td>
-      </tr>
+    let html = `
+    <html>
+    <head>
+      <title>CS 1.6 Rank</title>
+      <style>
+        body { background:#000; color:#fff; font-family:Arial; }
+        table { width:80%; margin:auto; border-collapse:collapse; }
+        td, th { padding:10px; border-bottom:1px solid #333; text-align:center; }
+        h1 { text-align:center; }
+      </style>
+    </head>
+    <body>
+      <h1>DELTA RANK SİSTEMİ</h1>
+      <table>
+        <tr>
+          <th>#</th>
+          <th>Nick</th>
+          <th>Total Kill</th>
+          <th>Total Damage</th>
+          <th>Rank</th>
+        </tr>
     `;
-  });
 
-  html += `</table></body></html>`;
+    result.rows.forEach((p, i) => {
+      html += `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${p.nick}</td>
+          <td>${p.total_kills}</td>
+          <td>${p.total_damage}</td>
+          <td>${Math.floor(p.rank_score)}</td>
+        </tr>
+      `;
+    });
 
-  res.send(html);
+    html += `</table></body></html>`;
+
+    res.send(html);
+
+  } catch (err) {
+    res.send("Hata: " + err.message);
+  }
 });
 
 // START
