@@ -12,13 +12,12 @@ const pool = new Pool({
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
-// 🔥 SCRAPER
+// SCRAPER
 async function fetchPlayers() {
   const { data } = await axios.get(BASE_URL);
   const $ = cheerio.load(data);
 
   const players = [];
-
   const rows = $("table.CSS_Table_Example tr");
 
   rows.each((i, row) => {
@@ -32,218 +31,245 @@ async function fetchPlayers() {
     const deaths = parseInt($(cols[4]).text()) || 0;
     const damage = parseInt($(cols[7]).text()) || 0;
 
-    if (!nick || nick === "." || nick === "|" || nick.includes("Toplam")) return;
+    if (!nick || nick.includes("Toplam")) return;
 
     players.push({ nick, kills, deaths, damage });
   });
 
-  console.log("Çekilen oyuncu:", players.length);
   return players;
 }
 
-// 🔥 DB KAYIT
+// DB
 async function fetchAndSave() {
-  try {
-    const players = await fetchPlayers();
+  const players = await fetchPlayers();
 
-    for (const p of players) {
-      const existing = await pool.query(
-        "SELECT * FROM players WHERE nick=$1",
-        [p.nick]
-      );
+  for (const p of players) {
+    const existing = await pool.query(
+      "SELECT * FROM players WHERE nick=$1",
+      [p.nick]
+    );
 
-      if (existing.rows.length === 0) {
-        await pool.query(`
-          INSERT INTO players (
-            nick, total_kills, total_deaths, total_damage,
-            last_kills, last_deaths, last_damage
-          )
-          VALUES ($1,$2,$3,$4,$2,$3,$4)
-        `, [p.nick, p.kills, p.deaths, p.damage]);
+    if (existing.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO players (
+          nick,total_kills,total_deaths,total_damage,
+          last_kills,last_deaths,last_damage
+        )
+        VALUES ($1,$2,$3,$4,$2,$3,$4)
+      `, [p.nick, p.kills, p.deaths, p.damage]);
+    } else {
+      const old = existing.rows[0];
 
-      } else {
-        const old = existing.rows[0];
+      const isReset =
+        p.kills < old.last_kills ||
+        p.deaths < old.last_deaths ||
+        p.damage < old.last_damage;
 
-        const isReset =
-          p.kills < old.last_kills ||
-          p.deaths < old.last_deaths ||
-          p.damage < old.last_damage;
+      const dk = isReset ? p.kills : p.kills - old.last_kills;
+      const dd = isReset ? p.deaths : p.deaths - old.last_deaths;
+      const dmg = isReset ? p.damage : p.damage - old.last_damage;
 
-        const deltaKills = isReset ? p.kills : (p.kills - old.last_kills);
-        const deltaDeaths = isReset ? p.deaths : (p.deaths - old.last_deaths);
-        const deltaDamage = isReset ? p.damage : (p.damage - old.last_damage);
-
-        await pool.query(`
-          UPDATE players
-          SET
-            total_kills = total_kills + $2,
-            total_deaths = total_deaths + $3,
-            total_damage = total_damage + $4,
-            last_kills = $5,
-            last_deaths = $6,
-            last_damage = $7,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE nick = $1
-        `, [
-          p.nick,
-          deltaKills,
-          deltaDeaths,
-          deltaDamage,
-          p.kills,
-          p.deaths,
-          p.damage
-        ]);
-      }
+      await pool.query(`
+        UPDATE players SET
+          total_kills = total_kills + $2,
+          total_deaths = total_deaths + $3,
+          total_damage = total_damage + $4,
+          last_kills = $5,
+          last_deaths = $6,
+          last_damage = $7
+        WHERE nick = $1
+      `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
     }
-
-    console.log("✔ Veri güncellendi");
-
-  } catch (err) {
-    console.error("SCRAPER HATA:", err.message);
   }
 }
 
-// 🔥 PANEL + ARAMA
+// PANEL
 app.get("/", async (req, res) => {
   const result = await pool.query(`
-    SELECT *,
-    (total_kills - total_deaths) AS rank_score
+    SELECT *, (total_kills - total_deaths) AS rank_score
     FROM players
     ORDER BY rank_score DESC
   `);
 
+  const players = result.rows;
+
+  const top3 = players.slice(0, 3);
+
   let html = `
   <html>
   <head>
-    <title>SEHRIN EFENDILERI</title>
-    <style>
-      body { margin:0; font-family: Arial; background:#f5f7fa; }
+  <title>SEHRIN EFENDILERI</title>
+  <style>
 
-      h1 {
-        text-align:center;
-        padding:15px;
-        margin:0;
-        background:#1e293b;
-        color:white;
-      }
+  body {
+    background:#0f172a;
+    color:white;
+    font-family:Arial;
+    margin:0;
+  }
 
-      h2 {
-        text-align:center;
-        margin-top:5px;
-        color:#64748b;
-        font-weight:normal;
-      }
+  h1 {
+    text-align:center;
+    padding:20px;
+    background:#020617;
+    margin:0;
+    font-size:28px;
+  }
 
-      .container { width:95%; margin:auto; }
+  .container {
+    width:95%;
+    margin:auto;
+  }
 
-      .search-box {
-        text-align:center;
-        margin-top:20px;
-      }
+  .top3 {
+    display:flex;
+    justify-content:center;
+    gap:20px;
+    margin-top:20px;
+  }
 
-      input {
-        padding:10px;
-        width:250px;
-        border-radius:6px;
-        border:1px solid #ccc;
-      }
+  .card {
+    padding:20px;
+    border-radius:12px;
+    text-align:center;
+    width:200px;
+    font-weight:bold;
+  }
 
-      button {
-        padding:10px 15px;
-        margin-left:10px;
-        background:#1e293b;
-        color:white;
-        border:none;
-        border-radius:6px;
-        cursor:pointer;
-      }
+  .gold {
+    background:#facc15;
+    color:black;
+    box-shadow:0 0 20px #facc15;
+  }
 
-      table {
-        width:100%;
-        margin-top:20px;
-        border-collapse:collapse;
-        background:white;
-      }
+  .silver {
+    background:#e5e7eb;
+    color:black;
+    box-shadow:0 0 15px #e5e7eb;
+  }
 
-      th {
-        background:#1e293b;
-        color:white;
-        padding:12px;
-      }
+  .bronze {
+    background:#fb923c;
+    color:black;
+    box-shadow:0 0 15px #fb923c;
+  }
 
-      td {
-        padding:10px;
-        text-align:center;
-        border-bottom:1px solid #ddd;
-      }
+  .search {
+    text-align:center;
+    margin-top:20px;
+  }
 
-      tr:nth-child(even) { background:#f1f5f9; }
+  input {
+    padding:10px;
+    width:250px;
+  }
 
-      tr:hover { background:#e2e8f0; }
+  button {
+    padding:10px;
+    margin-left:10px;
+    cursor:pointer;
+  }
 
-      .highlight { background:#ffe066 !important; }
+  #resultBox {
+    text-align:center;
+    margin-top:10px;
+    font-weight:bold;
+  }
 
-      .top1 { background:#fff7cc; font-weight:bold; }
-      .top2 { background:#f1f1f1; font-weight:bold; }
-      .top3 { background:#fcd5b5; font-weight:bold; }
+  table {
+    width:100%;
+    margin-top:20px;
+    border-collapse:collapse;
+  }
 
-    </style>
+  th {
+    background:#1e293b;
+    padding:10px;
+  }
+
+  td {
+    padding:8px;
+    text-align:center;
+    border-bottom:1px solid #334155;
+  }
+
+  tr:nth-child(even) {
+    background:#020617;
+  }
+
+  tr:hover {
+    background:#1e293b;
+  }
+
+  .highlight {
+    background:#facc15 !important;
+    color:black;
+  }
+
+  .kd-good { color:#22c55e; font-weight:bold; }
+  .kd-bad { color:#ef4444; font-weight:bold; }
+
+  </style>
   </head>
-
   <body>
 
   <h1>SEHRIN EFENDILERI</h1>
-  <h2>Oyuncu Sıralaması • Kalıcı İstatistik</h2>
 
   <div class="container">
 
-    <div class="search-box">
-      <input id="searchInput" placeholder="Nick ara...">
-      <button onclick="findPlayer()">Bul</button>
-    </div>
+  <div class="top3">
+    <div class="card silver">🥈 ${top3[1]?.nick || ""}</div>
+    <div class="card gold">🥇 ${top3[0]?.nick || ""}</div>
+    <div class="card bronze">🥉 ${top3[2]?.nick || ""}</div>
+  </div>
 
-    <table>
-      <tr>
-        <th>#</th>
-        <th>Nick</th>
-        <th>Öldürme</th>
-        <th>Ölüm</th>
-        <th>K/D</th>
-        <th>Hasar</th>
-        <th>Rank</th>
-      </tr>
+  <div class="search">
+    <input id="searchInput" placeholder="Nick ara...">
+    <button onclick="findPlayer()">Bul</button>
+    <div id="resultBox"></div>
+  </div>
+
+  <table>
+  <tr>
+    <th>#</th>
+    <th>Nick</th>
+    <th>Öldürme</th>
+    <th>Ölüm</th>
+    <th>K/D</th>
+    <th>Hasar</th>
+    <th>Rank</th>
+  </tr>
   `;
 
-  result.rows.forEach((p, i) => {
+  players.forEach((p, i) => {
     const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
 
-    let cls = "";
-    if (i === 0) cls = "top1";
-    else if (i === 1) cls = "top2";
-    else if (i === 2) cls = "top3";
+    let kdClass = "";
+    if (kd >= 2) kdClass = "kd-good";
+    else if (kd < 1) kdClass = "kd-bad";
 
     html += `
-      <tr class="${cls}">
-        <td>${i + 1}</td>
-        <td>${p.nick}</td>
-        <td>${p.total_kills}</td>
-        <td>${p.total_deaths}</td>
-        <td>${kd}</td>
-        <td>${p.total_damage}</td>
-        <td>${p.total_kills - p.total_deaths}</td>
-      </tr>
+    <tr>
+      <td>${i + 1}</td>
+      <td>${p.nick}</td>
+      <td>${p.total_kills}</td>
+      <td>${p.total_deaths}</td>
+      <td class="${kdClass}">${kd}</td>
+      <td>${p.total_damage}</td>
+      <td>${p.total_kills - p.total_deaths}</td>
+    </tr>
     `;
   });
 
   html += `
-    </table>
+  </table>
+
   </div>
 
 <script>
 function findPlayer() {
   const input = document.getElementById("searchInput").value.toLowerCase();
   const rows = document.querySelectorAll("table tr");
-
   let found = false;
 
   rows.forEach((row, i) => {
@@ -254,13 +280,16 @@ function findPlayer() {
     if (nick && nick.includes(input)) {
       row.classList.add("highlight");
       row.scrollIntoView({ behavior:"smooth", block:"center" });
+      document.getElementById("resultBox").innerText = (i) + ". sıradasın";
       found = true;
     } else {
       row.classList.remove("highlight");
     }
   });
 
-  if (!found) alert("Oyuncu bulunamadı");
+  if (!found) {
+    document.getElementById("resultBox").innerText = "Oyuncu bulunamadı";
+  }
 }
 </script>
 
