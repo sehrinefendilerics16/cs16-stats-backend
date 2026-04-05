@@ -12,86 +12,104 @@ const pool = new Pool({
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
+// ✅ DOĞRU SCRAPER
 async function fetchPlayers() {
   const { data } = await axios.get(BASE_URL);
   const $ = cheerio.load(data);
 
   const players = [];
 
-  $("table tr").each((i, row) => {
-    if (i === 0) return;
+  const rows = $("table.CSS_Table_Example tr");
+
+  rows.each((i, row) => {
+    if (i === 0) return; // header skip
 
     const cols = $(row).find("td");
-    if (cols.length < 8) return;
+
+    // sadece gerçek satırlar
+    if (cols.length !== 8) return;
 
     const nick = $(cols[1]).text().trim();
     const kills = parseInt($(cols[2]).text()) || 0;
     const deaths = parseInt($(cols[4]).text()) || 0;
     const damage = parseInt($(cols[7]).text()) || 0;
 
-    if (!nick) return;
+    // çöp verileri filtrele
+    if (!nick || nick === "." || nick === "|" || nick.includes("Toplam")) return;
 
     players.push({ nick, kills, deaths, damage });
   });
 
+  console.log("Çekilen oyuncu:", players.length);
+
   return players;
 }
 
+// ✅ DELTA LOGIC
 async function fetchAndSave() {
-  const players = await fetchPlayers();
+  try {
+    const players = await fetchPlayers();
 
-  for (const pl of players) {
-    const { nick, kills, deaths, damage } = pl;
+    for (const pl of players) {
+      const { nick, kills, deaths, damage } = pl;
 
-    const existing = await pool.query(
-      "SELECT * FROM players WHERE nick = $1",
-      [nick]
-    );
+      const existing = await pool.query(
+        "SELECT * FROM players WHERE nick = $1",
+        [nick]
+      );
 
-    if (existing.rows.length === 0) {
-      await pool.query(`
-        INSERT INTO players (nick, total_kills, total_deaths, total_damage, last_kills, last_deaths, last_damage)
-        VALUES ($1,$2,$3,$4,$2,$3,$4)
-      `, [nick, kills, deaths, damage]);
+      if (existing.rows.length === 0) {
+        await pool.query(`
+          INSERT INTO players (
+            nick, total_kills, total_deaths, total_damage,
+            last_kills, last_deaths, last_damage
+          )
+          VALUES ($1,$2,$3,$4,$2,$3,$4)
+        `, [nick, kills, deaths, damage]);
 
-    } else {
-      const p = existing.rows[0];
+      } else {
+        const p = existing.rows[0];
 
-      const isReset =
-        kills < p.last_kills ||
-        deaths < p.last_deaths ||
-        damage < p.last_damage;
+        const isReset =
+          kills < p.last_kills ||
+          deaths < p.last_deaths ||
+          damage < p.last_damage;
 
-      const deltaKills = isReset ? kills : (kills - p.last_kills);
-      const deltaDeaths = isReset ? deaths : (deaths - p.last_deaths);
-      const deltaDamage = isReset ? damage : (damage - p.last_damage);
+        const deltaKills = isReset ? kills : (kills - p.last_kills);
+        const deltaDeaths = isReset ? deaths : (deaths - p.last_deaths);
+        const deltaDamage = isReset ? damage : (damage - p.last_damage);
 
-      await pool.query(`
-        UPDATE players
-        SET
-          total_kills = total_kills + $2,
-          total_deaths = total_deaths + $3,
-          total_damage = total_damage + $4,
-          last_kills = $5,
-          last_deaths = $6,
-          last_damage = $7,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE nick = $1
-      `, [
-        nick,
-        deltaKills,
-        deltaDeaths,
-        deltaDamage,
-        kills,
-        deaths,
-        damage
-      ]);
+        await pool.query(`
+          UPDATE players
+          SET
+            total_kills = total_kills + $2,
+            total_deaths = total_deaths + $3,
+            total_damage = total_damage + $4,
+            last_kills = $5,
+            last_deaths = $6,
+            last_damage = $7,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE nick = $1
+        `, [
+          nick,
+          deltaKills,
+          deltaDeaths,
+          deltaDamage,
+          kills,
+          deaths,
+          damage
+        ]);
+      }
     }
-  }
 
-  console.log("✔ Veri güncellendi");
+    console.log("✔ Veri güncellendi");
+
+  } catch (err) {
+    console.error("SCRAPER HATA:", err.message);
+  }
 }
 
+// ✅ WEB PANEL
 app.get("/", async (req, res) => {
   const result = await pool.query(`
     SELECT *,
@@ -133,6 +151,7 @@ app.get("/", async (req, res) => {
   res.send(html);
 });
 
+// ✅ START
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
