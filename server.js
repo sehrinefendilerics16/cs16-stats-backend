@@ -72,10 +72,7 @@ async function fetchAndSave() {
   const players = await fetchPlayers();
 
   for (const p of players) {
-    const existing = await pool.query(
-      "SELECT * FROM players WHERE nick=$1",
-      [p.nick]
-    );
+    const existing = await pool.query("SELECT * FROM players WHERE nick=$1", [p.nick]);
 
     if (existing.rows.length === 0) {
       await pool.query(`
@@ -88,14 +85,9 @@ async function fetchAndSave() {
     } else {
       const old = existing.rows[0];
 
-      const isReset =
-        p.kills < old.last_kills ||
-        p.deaths < old.last_deaths ||
-        p.damage < old.last_damage;
-
-      const dk = isReset ? p.kills : p.kills - old.last_kills;
-      const dd = isReset ? p.deaths : p.deaths - old.last_deaths;
-      const dmg = isReset ? p.damage : p.damage - old.last_damage;
+      const dk = p.kills - old.last_kills;
+      const dd = p.deaths - old.last_deaths;
+      const dmg = p.damage - old.last_damage;
 
       await pool.query(`
         UPDATE players SET
@@ -124,138 +116,34 @@ app.get("/", async (req, res) => {
 
   const search = req.query.search;
 
-  let result;
-
-  if (search) {
-    result = await pool.query(`
-      SELECT *, (total_kills - total_deaths) AS rank_score
-      FROM players
-      WHERE LOWER(nick) LIKE LOWER($1)
-      ORDER BY rank_score DESC
-    `, [`%${search}%`]);
-  } else {
-    result = await pool.query(`
-      SELECT *, (total_kills - total_deaths) AS rank_score
-      FROM players
-      ORDER BY rank_score DESC
-    `);
-  }
+  const result = search
+    ? await pool.query(`SELECT *, (total_kills-total_deaths) AS rank_score FROM players WHERE LOWER(nick) LIKE LOWER($1) ORDER BY rank_score DESC`, [`%${search}%`])
+    : await pool.query(`SELECT *, (total_kills-total_deaths) AS rank_score FROM players ORDER BY rank_score DESC`);
 
   const players = result.rows;
+  const top3 = players.slice(0,3);
 
   let html = `
   <html>
   <head>
-  <title>SEHRIN EFENDILERI</title>
-
   <style>
   body { background:#0f172a;color:white;font-family:Arial;margin:0; }
   h1 { text-align:center;padding:20px;background:#020617;margin:0; }
 
+  .top3 { display:flex;justify-content:center;gap:20px;margin:20px; }
+  .card { padding:15px 25px;border-radius:10px;font-weight:bold; }
+  .gold { background:#facc15;color:black; }
+  .silver { background:#cbd5f5;color:black; }
+  .bronze { background:#fb923c;color:black; }
+
   .search { text-align:center;margin:20px; }
 
   input { padding:10px;border-radius:8px;border:none; }
-  button { padding:10px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer; }
+  button { padding:10px;border-radius:8px;border:none;background:#38bdf8; }
 
   table { width:95%; margin:auto; border-collapse:collapse; }
   th { background:#1e293b;padding:10px; }
   td { padding:8px;text-align:center;border-bottom:1px solid #334155; }
-
-  .kd-good { color:#22c55e; }
-  .kd-bad { color:#ef4444; }
-
-  a { color:#38bdf8; text-decoration:none; }
-  </style>
-  </head>
-
-  <body>
-
-  <h1>SEHRIN EFENDILERI</h1>
-
-  <form class="search">
-    <input name="search" placeholder="Nick ara..." />
-    <button>Bul</button>
-  </form>
-
-  <table>
-  <tr>
-    <th>#</th><th>Nick</th><th>Kill</th><th>Death</th><th>K/D</th><th>Damage</th><th>Rank</th>
-  </tr>
-  `;
-
-  players.forEach((p, i) => {
-    const kd = p.total_deaths === 0
-      ? p.total_kills
-      : (p.total_kills / p.total_deaths).toFixed(2);
-
-    const kdClass = kd >= 2 ? "kd-good" : kd < 1 ? "kd-bad" : "";
-
-    html += `
-    <tr>
-      <td>${i+1}</td>
-      <td><a href="/player/${encodeURIComponent(p.nick)}">${p.nick}</a></td>
-      <td>${p.total_kills}</td>
-      <td>${p.total_deaths}</td>
-      <td class="${kdClass}">${kd}</td>
-      <td>${p.total_damage}</td>
-      <td>${p.total_kills - p.total_deaths}</td>
-    </tr>`;
-  });
-
-  html += `</table></body></html>`;
-  res.send(html);
-});
-
-// ================= PROFİL =================
-app.get("/player/:nick", async (req, res) => {
-
-  const nick = decodeURIComponent(req.params.nick);
-
-  const player = await pool.query("SELECT * FROM players WHERE nick=$1", [nick]);
-  const history = await pool.query(`
-    SELECT * FROM player_history WHERE nick=$1 ORDER BY created_at ASC
-  `, [nick]);
-
-  if (player.rows.length === 0) return res.send("Oyuncu yok");
-
-  const p = player.rows[0];
-
-  const kd = p.total_deaths === 0
-    ? p.total_kills
-    : (p.total_kills / p.total_deaths).toFixed(2);
-
-  const durum =
-    kd >= 2 ? "🔥 Elit Oyuncu" :
-    kd >= 1 ? "⚖️ Ortalama" :
-    "💀 Zayıf Oyuncu";
-
-  const tarih = new Date(p.updated_at).toLocaleString("tr-TR", {
-    timeZone: "Europe/Istanbul"
-  });
-
-  res.send(`
-  <html>
-  <head>
-  <title>${nick}</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <style>
-  body { background:#0f172a;color:white;font-family:Arial;margin:0; }
-  .container { max-width:1000px;margin:auto;padding:20px; }
-  .header { background:#020617;padding:25px;border-radius:12px;text-align:center;font-size:28px;margin-bottom:20px; }
-
-  .grid { display:grid;grid-template-columns: repeat(3, 1fr);gap:15px; }
-
-  .card { background:#1e293b;padding:20px;border-radius:10px;text-align:center; }
-
-  .value { font-size:22px;margin-top:5px; }
-
-  .kd-good { color:#22c55e; }
-  .kd-bad { color:#ef4444; }
-
-  canvas { background:#020617;border-radius:10px;padding:10px;margin-top:20px; }
-
-  .info { text-align:center;margin-top:15px;opacity:0.7; }
 
   a { color:#38bdf8;text-decoration:none; }
   </style>
@@ -263,80 +151,55 @@ app.get("/player/:nick", async (req, res) => {
 
   <body>
 
-  <div class="container">
+  <h1>SEHRIN EFENDILERI</h1>
 
-    <div class="header">${nick}<br><small>${durum}</small></div>
-
-    <div class="grid">
-      <div class="card">Kill<div class="value">${p.total_kills}</div></div>
-      <div class="card">Death<div class="value">${p.total_deaths}</div></div>
-      <div class="card">K/D<div class="value ${kd>=2?"kd-good":kd<1?"kd-bad":""}">${kd}</div></div>
-      <div class="card">Damage<div class="value">${p.total_damage}</div></div>
-      <div class="card">Rank<div class="value">${p.total_kills - p.total_deaths}</div></div>
-      <div class="card">Durum<div class="value">${durum}</div></div>
-    </div>
-
-    ${
-      history.rows.length < 3
-        ? `<div class="info">Veri toplanıyor...</div>`
-        : `<canvas id="chart"></canvas>`
-    }
-
-    <div class="info">Son Güncelleme: ${tarih}</div>
-
-    <div class="info"><a href="/">← Ana Sayfa</a></div>
-
+  <div class="top3">
+    <div class="card gold">🥇 ${top3[0]?.nick || ""}</div>
+    <div class="card silver">🥈 ${top3[1]?.nick || ""}</div>
+    <div class="card bronze">🥉 ${top3[2]?.nick || ""}</div>
   </div>
 
-  <script>
-  const raw = ${JSON.stringify(history.rows)};
+  <form class="search">
+    <input name="search" placeholder="Oyuncu ara..." />
+    <button>Bul</button>
+  </form>
 
-  if (raw.length >= 3) {
-    const labels = raw.map(x => new Date(x.created_at).toLocaleTimeString("tr-TR"));
-    const kills = raw.map(x => x.kills);
-    const deaths = raw.map(x => x.deaths);
-    const damage = raw.map(x => x.damage);
+  <table>
+  <tr>
+    <th>#</th>
+    <th>Oyuncu</th>
+    <th>Öldürme</th>
+    <th>Ölüm</th>
+    <th>K/D</th>
+    <th>Hasar</th>
+    <th>Puan</th>
+  </tr>
+  `;
 
-    new Chart(document.getElementById("chart"), {
-      type: "line",
-      data: {
-        labels,
-        datasets: [
-          { label: "Kill", data: kills, borderColor:"#22c55e", yAxisID:"y", tension:0.3 },
-          { label: "Death", data: deaths, borderColor:"#ef4444", yAxisID:"y", tension:0.3 },
-          { label: "Damage", data: damage, borderColor:"#f59e0b", yAxisID:"y1", tension:0.3 }
-        ]
-      },
-      options: {
-        responsive:true,
-        interaction:{ mode:"index", intersect:false },
-        plugins:{ legend:{ labels:{ color:"white" } } },
-        scales:{
-          x:{ ticks:{ color:"white" } },
-          y:{ type:"linear", position:"left", ticks:{ color:"white" } },
-          y1:{
-            type:"linear",
-            position:"right",
-            grid:{ drawOnChartArea:false },
-            ticks:{ color:"orange" }
-          }
-        }
-      }
-    });
-  }
-  </script>
+  players.forEach((p,i)=>{
+    const kd = (p.total_kills / (p.total_deaths||1)).toFixed(2);
 
-  </body>
-  </html>
-  `);
+    html+=`
+    <tr>
+      <td>${i+1}</td>
+      <td><a href="/player/${encodeURIComponent(p.nick)}">${p.nick}</a></td>
+      <td>${p.total_kills}</td>
+      <td>${p.total_deaths}</td>
+      <td>${kd}</td>
+      <td>${p.total_damage}</td>
+      <td>${p.total_kills - p.total_deaths}</td>
+    </tr>`;
+  });
+
+  html+=`</table></body></html>`;
+
+  res.send(html);
 });
 
 // ================= START =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
-  console.log("Server çalıştı:", PORT);
-
   await initDB();
   await fetchAndSave();
   setInterval(fetchAndSave, 60000);
