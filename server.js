@@ -55,7 +55,7 @@ async function fetchPlayers() {
   return players;
 }
 
-// ================= UPDATE =================
+// ================= CORE LOGIC =================
 async function fetchAndSave() {
   const players = await fetchPlayers();
 
@@ -67,23 +67,51 @@ async function fetchAndSave() {
         INSERT INTO players (nick,total_kills,total_deaths,total_damage,last_kills,last_deaths,last_damage)
         VALUES ($1,$2,$3,$4,$2,$3,$4)
       `, [p.nick, p.kills, p.deaths, p.damage]);
-    } else {
-      const old = res.rows[0];
-
-      await pool.query(`
-        UPDATE players SET
-          total_kills = total_kills + ($2 - last_kills),
-          total_deaths = total_deaths + ($3 - last_deaths),
-          total_damage = total_damage + ($4 - last_damage),
-          last_kills = $2,
-          last_deaths = $3,
-          last_damage = $4,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE nick = $1
-      `, [p.nick, p.kills, p.deaths, p.damage]);
+      continue;
     }
+
+    const old = res.rows[0];
+
+    // ✔ Değişim yoksa skip (performans + veri temizliği)
+    if (
+      p.kills === old.last_kills &&
+      p.deaths === old.last_deaths &&
+      p.damage === old.last_damage
+    ) {
+      continue;
+    }
+
+    // ✔ RESET TESPİTİ (KRİTİK)
+    const isReset =
+      p.kills < old.last_kills ||
+      p.deaths < old.last_deaths ||
+      p.damage < old.last_damage;
+
+    const dk = isReset ? p.kills : p.kills - old.last_kills;
+    const dd = isReset ? p.deaths : p.deaths - old.last_deaths;
+    const dmg = isReset ? p.damage : p.damage - old.last_damage;
+
+    await pool.query(`
+      UPDATE players SET
+        total_kills = total_kills + $2,
+        total_deaths = total_deaths + $3,
+        total_damage = total_damage + $4,
+        last_kills = $5,
+        last_deaths = $6,
+        last_damage = $7,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE nick = $1
+    `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
   }
+
+  console.log("✔ Veri güncellendi:", new Date().toLocaleTimeString());
 }
+
+// ================= MANUEL TETİK =================
+app.get("/force-update", async (req, res) => {
+  await fetchAndSave();
+  res.send("Manuel veri çekildi ✔");
+});
 
 // ================= ANA SAYFA =================
 app.get("/", async (req, res) => {
@@ -176,7 +204,11 @@ app.get("/", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
+  console.log("Server çalıştı:", PORT);
+
   await initDB();
   await fetchAndSave();
+
+  // ✔ 60 saniyede bir çek
   setInterval(fetchAndSave, 60000);
 });
