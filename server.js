@@ -110,7 +110,6 @@ async function fetchAndSave() {
       `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
     }
 
-    // 🔥 her 5 dk history
     if (new Date().getMinutes() % 5 === 0) {
       await pool.query(`
         INSERT INTO player_history (nick, kills, deaths, damage)
@@ -303,16 +302,24 @@ app.get("/player/:nick", async (req, res) => {
       data: {
         labels,
         datasets: [
-          { label: "Kill", data: kills, borderColor:"#22c55e", tension:0.3 },
-          { label: "Death", data: deaths, borderColor:"#ef4444", tension:0.3 },
-          { label: "Damage", data: damage, borderColor:"#f59e0b", tension:0.3 }
+          { label: "Kill", data: kills, borderColor:"#22c55e", yAxisID:"y", tension:0.3 },
+          { label: "Death", data: deaths, borderColor:"#ef4444", yAxisID:"y", tension:0.3 },
+          { label: "Damage", data: damage, borderColor:"#f59e0b", yAxisID:"y1", tension:0.3 }
         ]
       },
       options: {
-        plugins: { legend:{ labels:{ color:"white" } } },
-        scales: {
+        responsive:true,
+        interaction:{ mode:"index", intersect:false },
+        plugins:{ legend:{ labels:{ color:"white" } } },
+        scales:{
           x:{ ticks:{ color:"white" } },
-          y:{ ticks:{ color:"white" } }
+          y:{ type:"linear", position:"left", ticks:{ color:"white" } },
+          y1:{
+            type:"linear",
+            position:"right",
+            grid:{ drawOnChartArea:false },
+            ticks:{ color:"orange" }
+          }
         }
       }
     });
@@ -331,7 +338,6 @@ app.listen(PORT, async () => {
   console.log("Server çalıştı:", PORT);
 
   await initDB();
-
   await fetchAndSave();
   setInterval(fetchAndSave, 60000);
 });
