@@ -165,17 +165,11 @@ app.get("/", async (req, res) => {
     </tr>`;
   });
 
-  html += `
-  </table>
-  </div>
-  </body>
-  </html>
-  `;
-
+  html += `</table></div></body></html>`;
   res.send(html);
 });
 
-// PROFİL SAYFASI
+// PROFİL SAYFASI (MODERN DASHBOARD)
 app.get("/player/:nick", async (req, res) => {
   const nick = decodeURIComponent(req.params.nick);
 
@@ -191,28 +185,130 @@ app.get("/player/:nick", async (req, res) => {
   const p = result.rows[0];
   const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
 
+  // KD renk
+  let kdColor = "#64748b";
+  if (kd >= 2) kdColor = "#22c55e";
+  else if (kd < 1) kdColor = "#ef4444";
+
+  // Seviye
+  let level = "Ortalama";
+  if (kd >= 2) level = "🔥 Elit Oyuncu";
+  else if (kd < 1) level = "💀 Zayıf Oyuncu";
+
+  // Türkiye saati
+  const tarih = new Date(p.updated_at).toLocaleString("tr-TR", {
+    timeZone: "Europe/Istanbul"
+  });
+
   res.send(`
   <html>
   <head>
   <title>${nick}</title>
   <style>
-  body { background:#0f172a;color:white;font-family:Arial;text-align:center; }
-  .box { margin-top:50px; }
+  body { background:#f1f5f9;font-family:Arial;margin:0; }
+
+  .container { max-width:900px; margin:40px auto; }
+
+  .header {
+    background:#0f172a;
+    color:white;
+    padding:30px;
+    border-radius:12px;
+    text-align:center;
+  }
+
+  .level {
+    margin-top:10px;
+    font-size:18px;
+    opacity:0.8;
+  }
+
+  .cards {
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:20px;
+    margin-top:20px;
+  }
+
+  .card {
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    box-shadow:0 5px 15px rgba(0,0,0,0.1);
+    text-align:center;
+  }
+
+  .value {
+    font-size:28px;
+    font-weight:bold;
+    margin-top:10px;
+  }
+
+  .meta {
+    margin-top:20px;
+    text-align:center;
+    color:#475569;
+  }
+
+  a {
+    display:inline-block;
+    margin-top:20px;
+    text-decoration:none;
+    color:#0f172a;
+    font-weight:bold;
+  }
+
   </style>
   </head>
 
   <body>
-  <div class="box">
-    <h1>${nick}</h1>
-    <p>Kill: ${p.total_kills}</p>
-    <p>Death: ${p.total_deaths}</p>
-    <p>K/D: ${kd}</p>
-    <p>Damage: ${p.total_damage}</p>
-    <p>Rank: ${p.total_kills - p.total_deaths}</p>
-    <p>Son Güncelleme: ${p.updated_at}</p>
-    <br>
-    <a href="/">← Geri</a>
+
+  <div class="container">
+
+    <div class="header">
+      <h1>${nick}</h1>
+      <div class="level">${level}</div>
+    </div>
+
+    <div class="cards">
+
+      <div class="card">
+        <div>Kill</div>
+        <div class="value">${p.total_kills}</div>
+      </div>
+
+      <div class="card">
+        <div>Death</div>
+        <div class="value">${p.total_deaths}</div>
+      </div>
+
+      <div class="card">
+        <div>K/D</div>
+        <div class="value" style="color:${kdColor}">${kd}</div>
+      </div>
+
+      <div class="card">
+        <div>Damage</div>
+        <div class="value">${p.total_damage}</div>
+      </div>
+
+      <div class="card">
+        <div>Rank</div>
+        <div class="value">${p.total_kills - p.total_deaths}</div>
+      </div>
+
+    </div>
+
+    <div class="meta">
+      Son Güncelleme: ${tarih}
+    </div>
+
+    <div style="text-align:center;">
+      <a href="/">← Geri Dön</a>
+    </div>
+
   </div>
+
   </body>
   </html>
   `);
