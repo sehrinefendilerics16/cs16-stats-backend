@@ -29,30 +29,19 @@ async function fetchPlayers() {
 
     const nick = $(cols[1]).text().trim();
     const kills = parseInt($(cols[2]).text()) || 0;
-    const headshot = parseInt($(cols[3]).text()) || 0;
     const deaths = parseInt($(cols[4]).text()) || 0;
-    const bullets = parseInt($(cols[5]).text()) || 0;
-    const hits = parseInt($(cols[6]).text()) || 0;
     const damage = parseInt($(cols[7]).text()) || 0;
 
     if (!nick || nick === "." || nick === "|" || nick.includes("Toplam")) return;
 
-    players.push({
-      nick,
-      kills,
-      headshot,
-      deaths,
-      bullets,
-      hits,
-      damage
-    });
+    players.push({ nick, kills, deaths, damage });
   });
 
   console.log("Çekilen oyuncu:", players.length);
   return players;
 }
 
-// 🔥 DB KAYIT (DELTA)
+// 🔥 DB KAYIT
 async function fetchAndSave() {
   try {
     const players = await fetchPlayers();
@@ -66,13 +55,8 @@ async function fetchAndSave() {
       if (existing.rows.length === 0) {
         await pool.query(`
           INSERT INTO players (
-            nick,
-            total_kills,
-            total_deaths,
-            total_damage,
-            last_kills,
-            last_deaths,
-            last_damage
+            nick, total_kills, total_deaths, total_damage,
+            last_kills, last_deaths, last_damage
           )
           VALUES ($1,$2,$3,$4,$2,$3,$4)
         `, [p.nick, p.kills, p.deaths, p.damage]);
@@ -119,7 +103,7 @@ async function fetchAndSave() {
   }
 }
 
-// 🔥 MODERN PANEL
+// 🔥 PANEL + ARAMA
 app.get("/", async (req, res) => {
   const result = await pool.query(`
     SELECT *,
@@ -131,32 +115,47 @@ app.get("/", async (req, res) => {
   let html = `
   <html>
   <head>
-    <title>CS 1.6 Rank Sistemi</title>
+    <title>SEHRIN EFENDILERI</title>
     <style>
-      body {
-        margin:0;
-        font-family: Arial;
-        background: #f5f7fa;
-      }
-
-      .container {
-        width: 95%;
-        margin: auto;
-      }
+      body { margin:0; font-family: Arial; background:#f5f7fa; }
 
       h1 {
         text-align:center;
-        padding:20px;
+        padding:15px;
         margin:0;
         background:#1e293b;
         color:white;
       }
 
-      .info {
-        background:#e2e8f0;
-        padding:15px;
-        margin-top:15px;
-        border-radius:8px;
+      h2 {
+        text-align:center;
+        margin-top:5px;
+        color:#64748b;
+        font-weight:normal;
+      }
+
+      .container { width:95%; margin:auto; }
+
+      .search-box {
+        text-align:center;
+        margin-top:20px;
+      }
+
+      input {
+        padding:10px;
+        width:250px;
+        border-radius:6px;
+        border:1px solid #ccc;
+      }
+
+      button {
+        padding:10px 15px;
+        margin-left:10px;
+        background:#1e293b;
+        color:white;
+        border:none;
+        border-radius:6px;
+        cursor:pointer;
       }
 
       table {
@@ -164,8 +163,6 @@ app.get("/", async (req, res) => {
         margin-top:20px;
         border-collapse:collapse;
         background:white;
-        border-radius:8px;
-        overflow:hidden;
       }
 
       th {
@@ -180,61 +177,58 @@ app.get("/", async (req, res) => {
         border-bottom:1px solid #ddd;
       }
 
-      tr:hover {
-        background:#f1f5f9;
-      }
+      tr:nth-child(even) { background:#f1f5f9; }
 
-      .top1 { color: gold; font-weight:bold; }
-      .top2 { color: silver; font-weight:bold; }
-      .top3 { color: #cd7f32; font-weight:bold; }
+      tr:hover { background:#e2e8f0; }
 
-      .kd {
-        font-weight:bold;
-      }
+      .highlight { background:#ffe066 !important; }
+
+      .top1 { background:#fff7cc; font-weight:bold; }
+      .top2 { background:#f1f1f1; font-weight:bold; }
+      .top3 { background:#fcd5b5; font-weight:bold; }
+
     </style>
   </head>
+
   <body>
 
-  <h1>CS 1.6 RANK SİSTEMİ</h1>
+  <h1>SEHRIN EFENDILERI</h1>
+  <h2>Oyuncu Sıralaması • Kalıcı İstatistik</h2>
 
   <div class="container">
 
-    <div class="info">
-      <b>Bilgilendirme:</b><br>
-      - Sıralama = Kill - Death<br>
-      - Veriler haftalık sıfırlanmaz, sürekli birikir<br>
-      - Oyuncu performansı uzun vadeli takip edilir
+    <div class="search-box">
+      <input id="searchInput" placeholder="Nick ara...">
+      <button onclick="findPlayer()">Bul</button>
     </div>
 
     <table>
       <tr>
         <th>#</th>
         <th>Nick</th>
-        <th>Kill</th>
-        <th>Death</th>
+        <th>Öldürme</th>
+        <th>Ölüm</th>
         <th>K/D</th>
-        <th>Damage</th>
+        <th>Hasar</th>
         <th>Rank</th>
       </tr>
   `;
 
   result.rows.forEach((p, i) => {
-    const kd = p.total_deaths === 0
-      ? p.total_kills
-      : (p.total_kills / p.total_deaths).toFixed(2);
+    const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
 
-    let rankClass = "";
-    if (i === 0) rankClass = "top1";
-    else if (i === 1) rankClass = "top2";
-    else if (i === 2) rankClass = "top3";
+    let cls = "";
+    if (i === 0) cls = "top1";
+    else if (i === 1) cls = "top2";
+    else if (i === 2) cls = "top3";
 
     html += `
-      <tr class="${rankClass}">
+      <tr class="${cls}">
         <td>${i + 1}</td>
         <td>${p.nick}</td>
         <td>${p.total_kills}</td>
         <td>${p.total_deaths}</td>
-        <td class="kd">${kd}</td>
+        <td>${kd}</td>
         <td>${p.total_damage}</td>
         <td>${p.total_kills - p.total_deaths}</td>
       </tr>
@@ -244,6 +238,32 @@ app.get("/", async (req, res) => {
   html += `
     </table>
   </div>
+
+<script>
+function findPlayer() {
+  const input = document.getElementById("searchInput").value.toLowerCase();
+  const rows = document.querySelectorAll("table tr");
+
+  let found = false;
+
+  rows.forEach((row, i) => {
+    if (i === 0) return;
+
+    const nick = row.children[1]?.innerText.toLowerCase();
+
+    if (nick && nick.includes(input)) {
+      row.classList.add("highlight");
+      row.scrollIntoView({ behavior:"smooth", block:"center" });
+      found = true;
+    } else {
+      row.classList.remove("highlight");
+    }
+  });
+
+  if (!found) alert("Oyuncu bulunamadı");
+}
+</script>
+
   </body>
   </html>
   `;
@@ -251,7 +271,7 @@ app.get("/", async (req, res) => {
   res.send(html);
 });
 
-// 🔥 SERVER START
+// START
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
