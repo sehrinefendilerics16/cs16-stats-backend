@@ -12,7 +12,7 @@ const pool = new Pool({
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
-// SCRAPER
+// ================= SCRAPER =================
 async function fetchPlayers() {
   const { data } = await axios.get(BASE_URL);
   const $ = cheerio.load(data);
@@ -39,7 +39,7 @@ async function fetchPlayers() {
   return players;
 }
 
-// DB UPDATE
+// ================= DB UPDATE =================
 async function fetchAndSave() {
   const players = await fetchPlayers();
 
@@ -84,7 +84,7 @@ async function fetchAndSave() {
   }
 }
 
-// ANA SAYFA
+// ================= ANA SAYFA =================
 app.get("/", async (req, res) => {
   const result = await pool.query(`
     SELECT *, (total_kills - total_deaths) AS rank_score
@@ -169,7 +169,7 @@ app.get("/", async (req, res) => {
   res.send(html);
 });
 
-// PROFİL SAYFASI (MODERN DASHBOARD)
+// ================= PROFİL SAYFASI =================
 app.get("/player/:nick", async (req, res) => {
   const nick = decodeURIComponent(req.params.nick);
 
@@ -185,17 +185,14 @@ app.get("/player/:nick", async (req, res) => {
   const p = result.rows[0];
   const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
 
-  // KD renk
   let kdColor = "#64748b";
   if (kd >= 2) kdColor = "#22c55e";
   else if (kd < 1) kdColor = "#ef4444";
 
-  // Seviye
   let level = "Ortalama";
   if (kd >= 2) level = "🔥 Elit Oyuncu";
   else if (kd < 1) level = "💀 Zayıf Oyuncu";
 
-  // Türkiye saati
   const tarih = new Date(p.updated_at).toLocaleString("tr-TR", {
     timeZone: "Europe/Istanbul"
   });
@@ -205,16 +202,30 @@ app.get("/player/:nick", async (req, res) => {
   <head>
   <title>${nick}</title>
   <style>
-  body { background:#f1f5f9;font-family:Arial;margin:0; }
 
-  .container { max-width:900px; margin:40px auto; }
+  body {
+    background:#f1f5f9;
+    font-family:Arial;
+    margin:0;
+  }
+
+  .container {
+    max-width:1200px;
+    margin:40px auto;
+    padding:20px;
+  }
 
   .header {
     background:#0f172a;
     color:white;
-    padding:30px;
-    border-radius:12px;
+    padding:40px;
+    border-radius:16px;
     text-align:center;
+  }
+
+  .header h1 {
+    margin:0;
+    font-size:32px;
   }
 
   .level {
@@ -223,39 +234,55 @@ app.get("/player/:nick", async (req, res) => {
     opacity:0.8;
   }
 
-  .cards {
+  .stats-grid {
     display:grid;
-    grid-template-columns:repeat(2,1fr);
+    grid-template-columns:repeat(3, 1fr);
     gap:20px;
-    margin-top:20px;
+    margin-top:30px;
   }
 
   .card {
     background:white;
-    padding:20px;
-    border-radius:12px;
-    box-shadow:0 5px 15px rgba(0,0,0,0.1);
+    padding:25px;
+    border-radius:14px;
+    box-shadow:0 10px 25px rgba(0,0,0,0.08);
     text-align:center;
+    transition:0.2s;
+  }
+
+  .card:hover {
+    transform:translateY(-5px);
+  }
+
+  .title {
+    color:#64748b;
+    font-size:14px;
   }
 
   .value {
-    font-size:28px;
+    font-size:32px;
     font-weight:bold;
     margin-top:10px;
   }
 
   .meta {
-    margin-top:20px;
+    margin-top:30px;
     text-align:center;
     color:#475569;
   }
 
-  a {
+  .back {
     display:inline-block;
-    margin-top:20px;
+    margin-top:15px;
     text-decoration:none;
     color:#0f172a;
     font-weight:bold;
+  }
+
+  @media(max-width:768px){
+    .stats-grid {
+      grid-template-columns:1fr;
+    }
   }
 
   </style>
@@ -270,41 +297,44 @@ app.get("/player/:nick", async (req, res) => {
       <div class="level">${level}</div>
     </div>
 
-    <div class="cards">
+    <div class="stats-grid">
 
       <div class="card">
-        <div>Kill</div>
+        <div class="title">Kill</div>
         <div class="value">${p.total_kills}</div>
       </div>
 
       <div class="card">
-        <div>Death</div>
+        <div class="title">Death</div>
         <div class="value">${p.total_deaths}</div>
       </div>
 
       <div class="card">
-        <div>K/D</div>
+        <div class="title">K/D</div>
         <div class="value" style="color:${kdColor}">${kd}</div>
       </div>
 
       <div class="card">
-        <div>Damage</div>
+        <div class="title">Damage</div>
         <div class="value">${p.total_damage}</div>
       </div>
 
       <div class="card">
-        <div>Rank</div>
+        <div class="title">Rank</div>
         <div class="value">${p.total_kills - p.total_deaths}</div>
+      </div>
+
+      <div class="card">
+        <div class="title">Durum</div>
+        <div class="value">${level}</div>
       </div>
 
     </div>
 
     <div class="meta">
       Son Güncelleme: ${tarih}
-    </div>
-
-    <div style="text-align:center;">
-      <a href="/">← Geri Dön</a>
+      <br>
+      <a class="back" href="/">← Ana Sayfa</a>
     </div>
 
   </div>
@@ -314,7 +344,7 @@ app.get("/player/:nick", async (req, res) => {
   `);
 });
 
-// START
+// ================= START =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
