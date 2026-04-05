@@ -110,7 +110,7 @@ async function fetchAndSave() {
       `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
     }
 
-    // 🔥 HER 5 DAKİKA HISTORY
+    // 🔥 her 5 dk history
     if (new Date().getMinutes() % 5 === 0) {
       await pool.query(`
         INSERT INTO player_history (nick, kills, deaths, damage)
@@ -143,13 +143,12 @@ app.get("/", async (req, res) => {
   }
 
   const players = result.rows;
-  const top3 = players.slice(0, 3);
 
   let html = `
   <html>
   <head>
   <title>SEHRIN EFENDILERI</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
   body { background:#0f172a;color:white;font-family:Arial;margin:0; }
   h1 { text-align:center;padding:20px;background:#020617;margin:0; }
@@ -186,7 +185,10 @@ app.get("/", async (req, res) => {
   `;
 
   players.forEach((p, i) => {
-    const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
+    const kd = p.total_deaths === 0
+      ? p.total_kills
+      : (p.total_kills / p.total_deaths).toFixed(2);
+
     const kdClass = kd >= 2 ? "kd-good" : kd < 1 ? "kd-bad" : "";
 
     html += `
@@ -218,7 +220,15 @@ app.get("/player/:nick", async (req, res) => {
   if (player.rows.length === 0) return res.send("Oyuncu yok");
 
   const p = player.rows[0];
-  const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
+
+  const kd = p.total_deaths === 0
+    ? p.total_kills
+    : (p.total_kills / p.total_deaths).toFixed(2);
+
+  const durum =
+    kd >= 2 ? "🔥 Elit Oyuncu" :
+    kd >= 1 ? "⚖️ Ortalama" :
+    "💀 Zayıf Oyuncu";
 
   const tarih = new Date(p.updated_at).toLocaleString("tr-TR", {
     timeZone: "Europe/Istanbul"
@@ -227,11 +237,28 @@ app.get("/player/:nick", async (req, res) => {
   res.send(`
   <html>
   <head>
+  <title>${nick}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
-  body { background:#f1f5f9;font-family:Arial; }
-  .container { max-width:900px;margin:auto;padding:20px; }
-  .card { background:white;padding:20px;margin:10px;border-radius:10px;text-align:center; }
+  body { background:#0f172a;color:white;font-family:Arial;margin:0; }
+  .container { max-width:1000px;margin:auto;padding:20px; }
+  .header { background:#020617;padding:25px;border-radius:12px;text-align:center;font-size:28px;margin-bottom:20px; }
+
+  .grid { display:grid;grid-template-columns: repeat(3, 1fr);gap:15px; }
+
+  .card { background:#1e293b;padding:20px;border-radius:10px;text-align:center; }
+
+  .value { font-size:22px;margin-top:5px; }
+
+  .kd-good { color:#22c55e; }
+  .kd-bad { color:#ef4444; }
+
+  canvas { background:#020617;border-radius:10px;padding:10px;margin-top:20px; }
+
+  .info { text-align:center;margin-top:15px;opacity:0.7; }
+
+  a { color:#38bdf8;text-decoration:none; }
   </style>
   </head>
 
@@ -239,30 +266,57 @@ app.get("/player/:nick", async (req, res) => {
 
   <div class="container">
 
-    <h2>${nick}</h2>
+    <div class="header">${nick}<br><small>${durum}</small></div>
 
-    <div class="card">Kill: ${p.total_kills}</div>
-    <div class="card">Death: ${p.total_deaths}</div>
-    <div class="card">K/D: ${kd}</div>
+    <div class="grid">
+      <div class="card">Kill<div class="value">${p.total_kills}</div></div>
+      <div class="card">Death<div class="value">${p.total_deaths}</div></div>
+      <div class="card">K/D<div class="value ${kd>=2?"kd-good":kd<1?"kd-bad":""}">${kd}</div></div>
+      <div class="card">Damage<div class="value">${p.total_damage}</div></div>
+      <div class="card">Rank<div class="value">${p.total_kills - p.total_deaths}</div></div>
+      <div class="card">Durum<div class="value">${durum}</div></div>
+    </div>
 
-    <canvas id="chart"></canvas>
+    ${
+      history.rows.length < 3
+        ? `<div class="info">Veri toplanıyor...</div>`
+        : `<canvas id="chart"></canvas>`
+    }
 
-    <p>Son Güncelleme: ${tarih}</p>
+    <div class="info">Son Güncelleme: ${tarih}</div>
+
+    <div class="info"><a href="/">← Ana Sayfa</a></div>
 
   </div>
 
   <script>
-  const data = ${JSON.stringify(history.rows)};
-  const labels = data.map(x => new Date(x.created_at).toLocaleTimeString("tr-TR"));
-  const kills = data.map(x => x.kills);
+  const raw = ${JSON.stringify(history.rows)};
 
-  new Chart(document.getElementById("chart"), {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{ label: "Kill", data: kills }]
-    }
-  });
+  if (raw.length >= 3) {
+    const labels = raw.map(x => new Date(x.created_at).toLocaleTimeString("tr-TR"));
+    const kills = raw.map(x => x.kills);
+    const deaths = raw.map(x => x.deaths);
+    const damage = raw.map(x => x.damage);
+
+    new Chart(document.getElementById("chart"), {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          { label: "Kill", data: kills, borderColor:"#22c55e", tension:0.3 },
+          { label: "Death", data: deaths, borderColor:"#ef4444", tension:0.3 },
+          { label: "Damage", data: damage, borderColor:"#f59e0b", tension:0.3 }
+        ]
+      },
+      options: {
+        plugins: { legend:{ labels:{ color:"white" } } },
+        scales: {
+          x:{ ticks:{ color:"white" } },
+          y:{ ticks:{ color:"white" } }
+        }
+      }
+    });
+  }
   </script>
 
   </body>
@@ -276,7 +330,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log("Server çalıştı:", PORT);
 
-  await initDB(); // 🔥 EN KRİTİK SATIR
+  await initDB();
 
   await fetchAndSave();
   setInterval(fetchAndSave, 60000);
