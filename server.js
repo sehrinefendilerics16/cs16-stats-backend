@@ -39,7 +39,7 @@ async function fetchPlayers() {
   return players;
 }
 
-// DB
+// DB UPDATE
 async function fetchAndSave() {
   const players = await fetchPlayers();
 
@@ -76,14 +76,15 @@ async function fetchAndSave() {
           total_damage = total_damage + $4,
           last_kills = $5,
           last_deaths = $6,
-          last_damage = $7
+          last_damage = $7,
+          updated_at = CURRENT_TIMESTAMP
         WHERE nick = $1
       `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
     }
   }
 }
 
-// PANEL
+// ANA SAYFA
 app.get("/", async (req, res) => {
   const result = await pool.query(`
     SELECT *, (total_kills - total_deaths) AS rank_score
@@ -92,7 +93,6 @@ app.get("/", async (req, res) => {
   `);
 
   const players = result.rows;
-
   const top3 = players.slice(0, 3);
 
   let html = `
@@ -100,119 +100,33 @@ app.get("/", async (req, res) => {
   <head>
   <title>SEHRIN EFENDILERI</title>
   <style>
+  body { background:#0f172a;color:white;font-family:Arial;margin:0; }
+  h1 { text-align:center;padding:20px;background:#020617;margin:0; }
 
-  body {
-    background:#0f172a;
-    color:white;
-    font-family:Arial;
-    margin:0;
-  }
+  .container { width:95%; margin:auto; }
 
-  h1 {
-    text-align:center;
-    padding:20px;
-    background:#020617;
-    margin:0;
-    font-size:28px;
-  }
+  .top3 { display:flex; justify-content:center; gap:20px; margin-top:20px; }
+  .card { padding:20px; border-radius:12px; width:200px; text-align:center; font-weight:bold; }
 
-  .container {
-    width:95%;
-    margin:auto;
-  }
+  .gold { background:#facc15; color:black; box-shadow:0 0 20px #facc15; }
+  .silver { background:#e5e7eb; color:black; box-shadow:0 0 15px #e5e7eb; }
+  .bronze { background:#fb923c; color:black; box-shadow:0 0 15px #fb923c; }
 
-  .top3 {
-    display:flex;
-    justify-content:center;
-    gap:20px;
-    margin-top:20px;
-  }
+  table { width:100%; margin-top:20px; border-collapse:collapse; }
+  th { background:#1e293b; padding:10px; }
+  td { padding:8px; text-align:center; border-bottom:1px solid #334155; }
 
-  .card {
-    padding:20px;
-    border-radius:12px;
-    text-align:center;
-    width:200px;
-    font-weight:bold;
-  }
+  tr:nth-child(even){ background:#020617; }
+  tr:hover { background:#1e293b; }
 
-  .gold {
-    background:#facc15;
-    color:black;
-    box-shadow:0 0 20px #facc15;
-  }
+  .kd-good { color:#22c55e; }
+  .kd-bad { color:#ef4444; }
 
-  .silver {
-    background:#e5e7eb;
-    color:black;
-    box-shadow:0 0 15px #e5e7eb;
-  }
-
-  .bronze {
-    background:#fb923c;
-    color:black;
-    box-shadow:0 0 15px #fb923c;
-  }
-
-  .search {
-    text-align:center;
-    margin-top:20px;
-  }
-
-  input {
-    padding:10px;
-    width:250px;
-  }
-
-  button {
-    padding:10px;
-    margin-left:10px;
-    cursor:pointer;
-  }
-
-  #resultBox {
-    text-align:center;
-    margin-top:10px;
-    font-weight:bold;
-  }
-
-  table {
-    width:100%;
-    margin-top:20px;
-    border-collapse:collapse;
-  }
-
-  th {
-    background:#1e293b;
-    padding:10px;
-  }
-
-  td {
-    padding:8px;
-    text-align:center;
-    border-bottom:1px solid #334155;
-  }
-
-  tr:nth-child(even) {
-    background:#020617;
-  }
-
-  tr:hover {
-    background:#1e293b;
-  }
-
-  .highlight {
-    background:#facc15 !important;
-    color:black;
-  }
-
-  .kd-good { color:#22c55e; font-weight:bold; }
-  .kd-bad { color:#ef4444; font-weight:bold; }
-
+  a { color:#38bdf8; text-decoration:none; }
   </style>
   </head>
-  <body>
 
+  <body>
   <h1>SEHRIN EFENDILERI</h1>
 
   <div class="container">
@@ -223,76 +137,37 @@ app.get("/", async (req, res) => {
     <div class="card bronze">🥉 ${top3[2]?.nick || ""}</div>
   </div>
 
-  <div class="search">
-    <input id="searchInput" placeholder="Nick ara...">
-    <button onclick="findPlayer()">Bul</button>
-    <div id="resultBox"></div>
-  </div>
-
   <table>
   <tr>
     <th>#</th>
     <th>Nick</th>
-    <th>Öldürme</th>
-    <th>Ölüm</th>
+    <th>Kill</th>
+    <th>Death</th>
     <th>K/D</th>
-    <th>Hasar</th>
+    <th>Damage</th>
     <th>Rank</th>
   </tr>
   `;
 
   players.forEach((p, i) => {
     const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
-
-    let kdClass = "";
-    if (kd >= 2) kdClass = "kd-good";
-    else if (kd < 1) kdClass = "kd-bad";
+    let kdClass = kd >= 2 ? "kd-good" : kd < 1 ? "kd-bad" : "";
 
     html += `
     <tr>
-      <td>${i + 1}</td>
-      <td>${p.nick}</td>
+      <td>${i+1}</td>
+      <td><a href="/player/${encodeURIComponent(p.nick)}">${p.nick}</a></td>
       <td>${p.total_kills}</td>
       <td>${p.total_deaths}</td>
       <td class="${kdClass}">${kd}</td>
       <td>${p.total_damage}</td>
       <td>${p.total_kills - p.total_deaths}</td>
-    </tr>
-    `;
+    </tr>`;
   });
 
   html += `
   </table>
-
   </div>
-
-<script>
-function findPlayer() {
-  const input = document.getElementById("searchInput").value.toLowerCase();
-  const rows = document.querySelectorAll("table tr");
-  let found = false;
-
-  rows.forEach((row, i) => {
-    if (i === 0) return;
-
-    const nick = row.children[1]?.innerText.toLowerCase();
-
-    if (nick && nick.includes(input)) {
-      row.classList.add("highlight");
-      row.scrollIntoView({ behavior:"smooth", block:"center" });
-      document.getElementById("resultBox").innerText = (i) + ". sıradasın";
-      found = true;
-    } else {
-      row.classList.remove("highlight");
-    }
-  });
-
-  if (!found) {
-    document.getElementById("resultBox").innerText = "Oyuncu bulunamadı";
-  }
-}
-</script>
-
   </body>
   </html>
   `;
@@ -300,12 +175,54 @@ function findPlayer() {
   res.send(html);
 });
 
+// PROFİL SAYFASI
+app.get("/player/:nick", async (req, res) => {
+  const nick = decodeURIComponent(req.params.nick);
+
+  const result = await pool.query(
+    "SELECT * FROM players WHERE nick=$1",
+    [nick]
+  );
+
+  if (result.rows.length === 0) {
+    return res.send("Oyuncu bulunamadı");
+  }
+
+  const p = result.rows[0];
+  const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
+
+  res.send(`
+  <html>
+  <head>
+  <title>${nick}</title>
+  <style>
+  body { background:#0f172a;color:white;font-family:Arial;text-align:center; }
+  .box { margin-top:50px; }
+  </style>
+  </head>
+
+  <body>
+  <div class="box">
+    <h1>${nick}</h1>
+    <p>Kill: ${p.total_kills}</p>
+    <p>Death: ${p.total_deaths}</p>
+    <p>K/D: ${kd}</p>
+    <p>Damage: ${p.total_damage}</p>
+    <p>Rank: ${p.total_kills - p.total_deaths}</p>
+    <p>Son Güncelleme: ${p.updated_at}</p>
+    <br>
+    <a href="/">← Geri</a>
+  </div>
+  </body>
+  </html>
+  `);
+});
+
 // START
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
   console.log("Server çalıştı:", PORT);
-
   await fetchAndSave();
   setInterval(fetchAndSave, 60000);
 });
