@@ -27,6 +27,14 @@ async function initDB() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // ✅ EKLENDİ (log tablosu)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_log (
+      id SERIAL PRIMARY KEY,
+      last_fetch TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 }
 
 // ================= SCRAPER =================
@@ -72,7 +80,6 @@ async function fetchAndSave() {
 
     const old = res.rows[0];
 
-    // ✔ Değişim yoksa skip (performans + veri temizliği)
     if (
       p.kills === old.last_kills &&
       p.deaths === old.last_deaths &&
@@ -81,7 +88,6 @@ async function fetchAndSave() {
       continue;
     }
 
-    // ✔ RESET TESPİTİ (KRİTİK)
     const isReset =
       p.kills < old.last_kills ||
       p.deaths < old.last_deaths ||
@@ -105,12 +111,34 @@ async function fetchAndSave() {
   }
 
   console.log("✔ Veri güncellendi:", new Date().toLocaleTimeString());
+
+  // ✅ EKLENDİ (son çekim zamanı kaydı)
+  await pool.query(`
+    INSERT INTO system_log (last_fetch)
+    VALUES (CURRENT_TIMESTAMP)
+  `);
 }
 
 // ================= MANUEL TETİK =================
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
   res.send("Manuel veri çekildi ✔");
+});
+
+// ✅ EKLENDİ (durum kontrol endpoint)
+app.get("/status", async (req, res) => {
+  const result = await pool.query(`
+    SELECT last_fetch FROM system_log
+    ORDER BY id DESC
+    LIMIT 1
+  `);
+
+  const last = result.rows[0];
+
+  res.send(`
+    <h2>Son Veri Çekim Zamanı</h2>
+    <p>${last ? last.last_fetch : "Henüz veri yok"}</p>
+  `);
 });
 
 // ================= ANA SAYFA =================
@@ -209,6 +237,5 @@ app.listen(PORT, async () => {
   await initDB();
   await fetchAndSave();
 
-  // ✔ 60 saniyede bir çek
   setInterval(fetchAndSave, 60000);
 });
