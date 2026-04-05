@@ -81,16 +81,38 @@ async function fetchAndSave() {
         WHERE nick = $1
       `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
     }
+
+    // 🔥 HISTORY (5 DK'DA 1)
+    if (new Date().getMinutes() % 5 === 0) {
+      await pool.query(`
+        INSERT INTO player_history (nick, kills, deaths, damage)
+        VALUES ($1,$2,$3,$4)
+      `, [p.nick, p.kills, p.deaths, p.damage]);
+    }
   }
 }
 
 // ================= ANA SAYFA =================
 app.get("/", async (req, res) => {
-  const result = await pool.query(`
-    SELECT *, (total_kills - total_deaths) AS rank_score
-    FROM players
-    ORDER BY rank_score DESC
-  `);
+
+  const search = req.query.search;
+
+  let result;
+
+  if (search) {
+    result = await pool.query(`
+      SELECT *, (total_kills - total_deaths) AS rank_score
+      FROM players
+      WHERE LOWER(nick) LIKE LOWER($1)
+      ORDER BY rank_score DESC
+    `, [`%${search}%`]);
+  } else {
+    result = await pool.query(`
+      SELECT *, (total_kills - total_deaths) AS rank_score
+      FROM players
+      ORDER BY rank_score DESC
+    `);
+  }
 
   const players = result.rows;
   const top3 = players.slice(0, 3);
@@ -100,19 +122,56 @@ app.get("/", async (req, res) => {
   <head>
   <title>SEHRIN EFENDILERI</title>
   <style>
+
   body { background:#0f172a;color:white;font-family:Arial;margin:0; }
-  h1 { text-align:center;padding:20px;background:#020617;margin:0; }
 
-  .container { width:95%; margin:auto; }
+  h1 {
+    text-align:center;
+    padding:20px;
+    background:#020617;
+    margin:0;
+  }
 
-  .top3 { display:flex; justify-content:center; gap:20px; margin-top:20px; }
-  .card { padding:20px; border-radius:12px; width:200px; text-align:center; font-weight:bold; }
+  .search {
+    text-align:center;
+    margin:20px;
+  }
 
-  .gold { background:#facc15; color:black; box-shadow:0 0 20px #facc15; }
-  .silver { background:#e5e7eb; color:black; box-shadow:0 0 15px #e5e7eb; }
-  .bronze { background:#fb923c; color:black; box-shadow:0 0 15px #fb923c; }
+  .search input {
+    padding:10px;
+    width:250px;
+    border-radius:8px;
+    border:none;
+  }
 
-  table { width:100%; margin-top:20px; border-collapse:collapse; }
+  .search button {
+    padding:10px;
+    border:none;
+    border-radius:8px;
+    background:#38bdf8;
+    cursor:pointer;
+  }
+
+  .top3 {
+    display:flex;
+    justify-content:center;
+    gap:20px;
+  }
+
+  .card {
+    padding:20px;
+    border-radius:12px;
+    width:200px;
+    text-align:center;
+    font-weight:bold;
+  }
+
+  .gold { background:#facc15; color:black; }
+  .silver { background:#e5e7eb; color:black; }
+  .bronze { background:#fb923c; color:black; }
+
+  table { width:95%; margin:auto; border-collapse:collapse; }
+
   th { background:#1e293b; padding:10px; }
   td { padding:8px; text-align:center; border-bottom:1px solid #334155; }
 
@@ -123,13 +182,18 @@ app.get("/", async (req, res) => {
   .kd-bad { color:#ef4444; }
 
   a { color:#38bdf8; text-decoration:none; }
+
   </style>
   </head>
 
   <body>
+
   <h1>SEHRIN EFENDILERI</h1>
 
-  <div class="container">
+  <form class="search">
+    <input name="search" placeholder="Nick ara..." />
+    <button>Bul</button>
+  </form>
 
   <div class="top3">
     <div class="card silver">🥈 ${top3[1]?.nick || ""}</div>
@@ -151,7 +215,7 @@ app.get("/", async (req, res) => {
 
   players.forEach((p, i) => {
     const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
-    let kdClass = kd >= 2 ? "kd-good" : kd < 1 ? "kd-bad" : "";
+    const kdClass = kd >= 2 ? "kd-good" : kd < 1 ? "kd-bad" : "";
 
     html += `
     <tr>
@@ -165,33 +229,31 @@ app.get("/", async (req, res) => {
     </tr>`;
   });
 
-  html += `</table></div></body></html>`;
+  html += `</table></body></html>`;
   res.send(html);
 });
 
-// ================= PROFİL SAYFASI =================
+// ================= PROFİL =================
 app.get("/player/:nick", async (req, res) => {
+
   const nick = decodeURIComponent(req.params.nick);
 
-  const result = await pool.query(
-    "SELECT * FROM players WHERE nick=$1",
-    [nick]
-  );
+  const player = await pool.query("SELECT * FROM players WHERE nick=$1", [nick]);
+  const history = await pool.query(`
+    SELECT * FROM player_history WHERE nick=$1 ORDER BY created_at ASC
+  `, [nick]);
 
-  if (result.rows.length === 0) {
-    return res.send("Oyuncu bulunamadı");
-  }
+  if (player.rows.length === 0) return res.send("Oyuncu yok");
 
-  const p = result.rows[0];
+  const p = player.rows[0];
+
   const kd = p.total_deaths === 0 ? p.total_kills : (p.total_kills / p.total_deaths).toFixed(2);
 
-  let kdColor = "#64748b";
-  if (kd >= 2) kdColor = "#22c55e";
-  else if (kd < 1) kdColor = "#ef4444";
-
-  let level = "Ortalama";
-  if (kd >= 2) level = "🔥 Elit Oyuncu";
-  else if (kd < 1) level = "💀 Zayıf Oyuncu";
+  let level = "🟡 Ortalama";
+  if (kd >= 2.5) level = "👑 Efsane";
+  else if (kd >= 2) level = "🔥 Elit";
+  else if (kd >= 1.2) level = "⚔️ İyi";
+  else if (kd < 0.8) level = "💀 Zayıf";
 
   const tarih = new Date(p.updated_at).toLocaleString("tr-TR", {
     timeZone: "Europe/Istanbul"
@@ -200,90 +262,43 @@ app.get("/player/:nick", async (req, res) => {
   res.send(`
   <html>
   <head>
-  <title>${nick}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
 
-  body {
-    background:#f1f5f9;
-    font-family:Arial;
-    margin:0;
-  }
+  body { background:#f1f5f9; font-family:Arial; }
 
-  .container {
-    max-width:1200px;
-    margin:40px auto;
-    padding:20px;
-  }
+  .container { max-width:1100px; margin:auto; padding:20px; }
 
   .header {
-    background:#0f172a;
+    background:#020617;
     color:white;
     padding:40px;
     border-radius:16px;
     text-align:center;
   }
 
-  .header h1 {
-    margin:0;
-    font-size:32px;
-  }
-
-  .level {
-    margin-top:10px;
-    font-size:18px;
-    opacity:0.8;
-  }
-
-  .stats-grid {
+  .grid {
     display:grid;
-    grid-template-columns:repeat(3, 1fr);
+    grid-template-columns:repeat(3,1fr);
     gap:20px;
-    margin-top:30px;
+    margin-top:20px;
   }
 
   .card {
     background:white;
     padding:25px;
     border-radius:14px;
-    box-shadow:0 10px 25px rgba(0,0,0,0.08);
     text-align:center;
-    transition:0.2s;
   }
 
-  .card:hover {
-    transform:translateY(-5px);
+  .big {
+    grid-column:span 3;
+    background:#020617;
+    color:white;
   }
 
-  .title {
-    color:#64748b;
-    font-size:14px;
-  }
-
-  .value {
-    font-size:32px;
-    font-weight:bold;
-    margin-top:10px;
-  }
-
-  .meta {
-    margin-top:30px;
-    text-align:center;
-    color:#475569;
-  }
-
-  .back {
-    display:inline-block;
-    margin-top:15px;
-    text-decoration:none;
-    color:#0f172a;
-    font-weight:bold;
-  }
-
-  @media(max-width:768px){
-    .stats-grid {
-      grid-template-columns:1fr;
-    }
-  }
+  .big .value { font-size:60px; }
 
   </style>
   </head>
@@ -294,50 +309,48 @@ app.get("/player/:nick", async (req, res) => {
 
     <div class="header">
       <h1>${nick}</h1>
-      <div class="level">${level}</div>
+      <div>${level}</div>
     </div>
 
-    <div class="stats-grid">
+    <div class="grid">
 
-      <div class="card">
-        <div class="title">Kill</div>
-        <div class="value">${p.total_kills}</div>
-      </div>
+      <div class="card">Kill<br><b>${p.total_kills}</b></div>
+      <div class="card">Death<br><b>${p.total_deaths}</b></div>
 
-      <div class="card">
-        <div class="title">Death</div>
-        <div class="value">${p.total_deaths}</div>
-      </div>
+      <div class="card big">K/D<br><div class="value">${kd}</div></div>
 
-      <div class="card">
-        <div class="title">K/D</div>
-        <div class="value" style="color:${kdColor}">${kd}</div>
-      </div>
-
-      <div class="card">
-        <div class="title">Damage</div>
-        <div class="value">${p.total_damage}</div>
-      </div>
-
-      <div class="card">
-        <div class="title">Rank</div>
-        <div class="value">${p.total_kills - p.total_deaths}</div>
-      </div>
-
-      <div class="card">
-        <div class="title">Durum</div>
-        <div class="value">${level}</div>
-      </div>
+      <div class="card">Damage<br><b>${p.total_damage}</b></div>
+      <div class="card">Rank<br><b>${p.total_kills - p.total_deaths}</b></div>
+      <div class="card">Durum<br><b>${level}</b></div>
 
     </div>
 
-    <div class="meta">
-      Son Güncelleme: ${tarih}
-      <br>
-      <a class="back" href="/">← Ana Sayfa</a>
-    </div>
+    <canvas id="chart" height="100"></canvas>
+
+    <p style="text-align:center;">Son Güncelleme: ${tarih}</p>
 
   </div>
+
+  <script>
+
+  const data = ${JSON.stringify(history.rows)};
+
+  const labels = data.map(x => new Date(x.created_at).toLocaleTimeString("tr-TR"));
+  const kills = data.map(x => x.kills);
+
+  new Chart(document.getElementById("chart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Kill Gelişimi",
+        data: kills,
+        borderColor: "#38bdf8"
+      }]
+    }
+  });
+
+  </script>
 
   </body>
   </html>
