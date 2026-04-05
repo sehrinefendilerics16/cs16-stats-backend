@@ -12,7 +12,7 @@ const pool = new Pool({
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
-// ================= DB INIT =================
+// ================= DB =================
 async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
@@ -40,15 +40,14 @@ async function initDB() {
   `);
 }
 
-// ================= SCRAPER =================
+// ================= SCRAPE =================
 async function fetchPlayers() {
   const { data } = await axios.get(BASE_URL);
   const $ = cheerio.load(data);
 
   const players = [];
-  const rows = $("table.CSS_Table_Example tr");
 
-  rows.each((i, row) => {
+  $("table.CSS_Table_Example tr").each((i, row) => {
     if (i === 0) return;
 
     const cols = $(row).find("td");
@@ -67,44 +66,37 @@ async function fetchPlayers() {
   return players;
 }
 
-// ================= DB UPDATE =================
+// ================= UPDATE =================
 async function fetchAndSave() {
   const players = await fetchPlayers();
 
   for (const p of players) {
-    const existing = await pool.query("SELECT * FROM players WHERE nick=$1", [p.nick]);
+    const res = await pool.query("SELECT * FROM players WHERE nick=$1", [p.nick]);
 
-    if (existing.rows.length === 0) {
+    if (res.rows.length === 0) {
       await pool.query(`
-        INSERT INTO players (
-          nick,total_kills,total_deaths,total_damage,
-          last_kills,last_deaths,last_damage
-        )
+        INSERT INTO players (nick,total_kills,total_deaths,total_damage,last_kills,last_deaths,last_damage)
         VALUES ($1,$2,$3,$4,$2,$3,$4)
       `, [p.nick, p.kills, p.deaths, p.damage]);
     } else {
-      const old = existing.rows[0];
-
-      const dk = p.kills - old.last_kills;
-      const dd = p.deaths - old.last_deaths;
-      const dmg = p.damage - old.last_damage;
+      const old = res.rows[0];
 
       await pool.query(`
         UPDATE players SET
-          total_kills = total_kills + $2,
-          total_deaths = total_deaths + $3,
-          total_damage = total_damage + $4,
-          last_kills = $5,
-          last_deaths = $6,
-          last_damage = $7,
+          total_kills = total_kills + ($2 - last_kills),
+          total_deaths = total_deaths + ($3 - last_deaths),
+          total_damage = total_damage + ($4 - last_damage),
+          last_kills = $2,
+          last_deaths = $3,
+          last_damage = $4,
           updated_at = CURRENT_TIMESTAMP
         WHERE nick = $1
-      `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
+      `, [p.nick, p.kills, p.deaths, p.damage]);
     }
 
     if (new Date().getMinutes() % 5 === 0) {
       await pool.query(`
-        INSERT INTO player_history (nick, kills, deaths, damage)
+        INSERT INTO player_history (nick,kills,deaths,damage)
         VALUES ($1,$2,$3,$4)
       `, [p.nick, p.kills, p.deaths, p.damage]);
     }
@@ -114,55 +106,36 @@ async function fetchAndSave() {
 // ================= ANA SAYFA =================
 app.get("/", async (req, res) => {
 
-  const search = req.query.search;
-
-  const result = search
-    ? await pool.query(`SELECT *, (total_kills-total_deaths) AS rank_score FROM players WHERE LOWER(nick) LIKE LOWER($1) ORDER BY rank_score DESC`, [`%${search}%`])
-    : await pool.query(`SELECT *, (total_kills-total_deaths) AS rank_score FROM players ORDER BY rank_score DESC`);
+  const result = await pool.query(`
+    SELECT *, (total_kills-total_deaths) AS puan
+    FROM players ORDER BY puan DESC
+  `);
 
   const players = result.rows;
   const top3 = players.slice(0,3);
 
   let html = `
-  <html>
-  <head>
-  <style>
-  body { background:#0f172a;color:white;font-family:Arial;margin:0; }
-  h1 { text-align:center;padding:20px;background:#020617;margin:0; }
-
-  .top3 { display:flex;justify-content:center;gap:20px;margin:20px; }
-  .card { padding:15px 25px;border-radius:10px;font-weight:bold; }
-  .gold { background:#facc15;color:black; }
-  .silver { background:#cbd5f5;color:black; }
-  .bronze { background:#fb923c;color:black; }
-
-  .search { text-align:center;margin:20px; }
-
-  input { padding:10px;border-radius:8px;border:none; }
-  button { padding:10px;border-radius:8px;border:none;background:#38bdf8; }
-
-  table { width:95%; margin:auto; border-collapse:collapse; }
-  th { background:#1e293b;padding:10px; }
-  td { padding:8px;text-align:center;border-bottom:1px solid #334155; }
-
-  a { color:#38bdf8;text-decoration:none; }
-  </style>
-  </head>
-
-  <body>
+  <html><head><style>
+  body{background:#0f172a;color:white;font-family:Arial;margin:0}
+  h1{text-align:center;padding:20px;background:#020617;margin:0}
+  .top{display:flex;justify-content:center;gap:20px;margin:20px}
+  .box{padding:15px 25px;border-radius:10px;font-weight:bold}
+  .g{background:#facc15;color:black}
+  .s{background:#cbd5f5;color:black}
+  .b{background:#fb923c;color:black}
+  table{width:95%;margin:auto;border-collapse:collapse}
+  th{background:#1e293b;padding:10px}
+  td{padding:8px;text-align:center;border-bottom:1px solid #334155}
+  a{color:#38bdf8;text-decoration:none}
+  </style></head><body>
 
   <h1>SEHRIN EFENDILERI</h1>
 
-  <div class="top3">
-    <div class="card gold">🥇 ${top3[0]?.nick || ""}</div>
-    <div class="card silver">🥈 ${top3[1]?.nick || ""}</div>
-    <div class="card bronze">🥉 ${top3[2]?.nick || ""}</div>
+  <div class="top">
+    <div class="box g">🥇 ${top3[0]?.nick||""}</div>
+    <div class="box s">🥈 ${top3[1]?.nick||""}</div>
+    <div class="box b">🥉 ${top3[2]?.nick||""}</div>
   </div>
-
-  <form class="search">
-    <input name="search" placeholder="Oyuncu ara..." />
-    <button>Bul</button>
-  </form>
 
   <table>
   <tr>
@@ -177,7 +150,7 @@ app.get("/", async (req, res) => {
   `;
 
   players.forEach((p,i)=>{
-    const kd = (p.total_kills / (p.total_deaths||1)).toFixed(2);
+    const kd = (p.total_kills/(p.total_deaths||1)).toFixed(2);
 
     html+=`
     <tr>
@@ -187,13 +160,62 @@ app.get("/", async (req, res) => {
       <td>${p.total_deaths}</td>
       <td>${kd}</td>
       <td>${p.total_damage}</td>
-      <td>${p.total_kills - p.total_deaths}</td>
+      <td>${p.puan}</td>
     </tr>`;
   });
 
   html+=`</table></body></html>`;
-
   res.send(html);
+});
+
+// ================= PROFİL =================
+app.get("/player/:nick", async (req, res) => {
+
+  const nick = decodeURIComponent(req.params.nick);
+
+  const p = (await pool.query("SELECT * FROM players WHERE nick=$1",[nick])).rows[0];
+  const history = (await pool.query("SELECT * FROM player_history WHERE nick=$1 ORDER BY created_at",[nick])).rows;
+
+  if (!p) return res.send("Oyuncu yok");
+
+  const kd = (p.total_kills/(p.total_deaths||1)).toFixed(2);
+
+  res.send(`
+  <html>
+  <head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+  body{background:#0f172a;color:white;font-family:Arial}
+  .box{background:#1e293b;padding:15px;border-radius:10px;margin:10px}
+  </style>
+  </head>
+  <body>
+
+  <h1>${nick}</h1>
+
+  <div class="box">Kill: ${p.total_kills}</div>
+  <div class="box">Death: ${p.total_deaths}</div>
+  <div class="box">K/D: ${kd}</div>
+
+  <canvas id="c"></canvas>
+
+  <script>
+  const data = ${JSON.stringify(history)};
+  new Chart(document.getElementById("c"),{
+    type:"line",
+    data:{
+      labels:data.map(x=>new Date(x.created_at).toLocaleTimeString()),
+      datasets:[
+        {label:"Kill",data:data.map(x=>x.kills),borderColor:"green"},
+        {label:"Death",data:data.map(x=>x.deaths),borderColor:"red"},
+        {label:"Damage",data:data.map(x=>x.damage),borderColor:"orange"}
+      ]
+    }
+  })
+  </script>
+
+  </body></html>
+  `);
 });
 
 // ================= START =================
