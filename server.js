@@ -12,139 +12,89 @@ const pool = new Pool({
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
-// TÜM SAYFALARI ÇEK
-async function fetchAllPlayers() {
-  let page = 1;
-  let allPlayers = [];
+// TEK SAYFA ÇEK
+async function fetchPlayers() {
+  const { data } = await axios.get(BASE_URL);
+  const $ = cheerio.load(data);
 
-  while (true) {
-    try {
-      console.log("Sayfa çekiliyor:", page);
+  const players = [];
 
-      const url = `${BASE_URL}&page=${page}`;
-      const { data } = await axios.get(url);
-      const $ = cheerio.load(data);
-      const rows = $("table tr");
+  $("table tr").each((i, row) => {
+    if (i === 0) return;
 
-      let count = 0;
+    const cols = $(row).find("td");
+    if (cols.length < 8) return;
 
-      for (let i = 1; i < rows.length; i++) {
-        const cols = $(rows[i]).find("td");
-        if (cols.length < 10) continue;
+    const nick = $(cols[1]).text().trim();
+    const kills = parseInt($(cols[2]).text()) || 0;
+    const deaths = parseInt($(cols[4]).text()) || 0;
+    const damage = parseInt($(cols[7]).text()) || 0;
 
-        const nick = $(cols[1]).text().trim();
-        const kills = parseInt($(cols[2]).text()) || 0;
-        const deaths = parseInt($(cols[4]).text()) || 0;
-        const damage = parseInt($(cols[9]).text()) || 0;
+    if (!nick) return;
 
-        if (!nick) continue;
+    players.push({ nick, kills, deaths, damage });
+  });
 
-        allPlayers.push({ nick, kills, deaths, damage });
-        count++;
-      }
-
-      console.log(`Sayfa ${page}: ${count} oyuncu`);
-
-      if (count === 0) break;
-
-      page++;
-
-    } catch (err) {
-      console.error("Sayfa hatası:", err.message);
-      break;
-    }
-  }
-
-  return allPlayers;
+  return players;
 }
 
-// DELTA + DB KAYIT
+// DELTA SİSTEM
 async function fetchAndSave() {
-  try {
-    const players = await fetchAllPlayers();
+  const players = await fetchPlayers();
 
-    for (const pl of players) {
-      const { nick, kills, deaths, damage } = pl;
+  for (const pl of players) {
+    const { nick, kills, deaths, damage } = pl;
 
-      const existing = await pool.query(
-        "SELECT * FROM players WHERE nick = $1",
-        [nick]
-      );
+    const existing = await pool.query(
+      "SELECT * FROM players WHERE nick = $1",
+      [nick]
+    );
 
-      if (existing.rows.length === 0) {
-        // İLK KAYIT
-        await pool.query(`
-          INSERT INTO players (
-            nick,
-            total_kills,
-            total_deaths,
-            total_damage,
-            last_kills,
-            last_deaths,
-            last_damage
-          )
-          VALUES ($1, $2, $3, $4, $2, $3, $4)
-        `, [nick, kills, deaths, damage]);
+    if (existing.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO players (nick, total_kills, total_deaths, total_damage, last_kills, last_deaths, last_damage)
+        VALUES ($1,$2,$3,$4,$2,$3,$4)
+      `, [nick, kills, deaths, damage]);
 
-      } else {
-        const p = existing.rows[0];
+    } else {
+      const p = existing.rows[0];
 
-        let deltaKills = 0;
-        let deltaDeaths = 0;
-        let deltaDamage = 0;
+      const isReset =
+        kills < p.last_kills ||
+        deaths < p.last_deaths ||
+        damage < p.last_damage;
 
-        // KILL
-        if (kills >= p.last_kills) {
-          deltaKills = kills - p.last_kills;
-        } else {
-          deltaKills = kills;
-        }
+      const deltaKills = isReset ? kills : (kills - p.last_kills);
+      const deltaDeaths = isReset ? deaths : (deaths - p.last_deaths);
+      const deltaDamage = isReset ? damage : (damage - p.last_damage);
 
-        // DEATH
-        if (deaths >= p.last_deaths) {
-          deltaDeaths = deaths - p.last_deaths;
-        } else {
-          deltaDeaths = deaths;
-        }
-
-        // DAMAGE
-        if (damage >= p.last_damage) {
-          deltaDamage = damage - p.last_damage;
-        } else {
-          deltaDamage = damage;
-        }
-
-        await pool.query(`
-          UPDATE players
-          SET
-            total_kills = total_kills + $2,
-            total_deaths = total_deaths + $3,
-            total_damage = total_damage + $4,
-            last_kills = $5,
-            last_deaths = $6,
-            last_damage = $7,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE nick = $1
-        `, [
-          nick,
-          deltaKills,
-          deltaDeaths,
-          deltaDamage,
-          kills,
-          deaths,
-          damage
-        ]);
-      }
+      await pool.query(`
+        UPDATE players
+        SET
+          total_kills = total_kills + $2,
+          total_deaths = total_deaths + $3,
+          total_damage = total_damage + $4,
+          last_kills = $5,
+          last_deaths = $6,
+          last_damage = $7,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE nick = $1
+      `, [
+        nick,
+        deltaKills,
+        deltaDeaths,
+        deltaDamage,
+        kills,
+        deaths,
+        damage
+      ]);
     }
-
-    console.log("✔ Tüm veri işlendi");
-
-  } catch (err) {
-    console.error("❌ SCRAPER HATA:", err.message);
   }
+
+  console.log("✔ Veri güncellendi");
 }
 
-// RANK SAYFA (DOĞRU FORMÜL)
+// PANEL
 app.get("/", async (req, res) => {
   const result = await pool.query(`
     SELECT *,
@@ -155,26 +105,17 @@ app.get("/", async (req, res) => {
 
   let html = `
   <html>
-  <head>
-    <title>CS 1.6 Rank</title>
-    <style>
-      body { background:#000; color:#fff; font-family:Arial; }
-      table { width:90%; margin:auto; border-collapse:collapse; }
-      td, th { padding:8px; border-bottom:1px solid #333; text-align:center; }
-      h1 { text-align:center; }
-    </style>
-  </head>
-  <body>
-    <h1>PANEL AYNI RANK SİSTEMİ</h1>
-    <table>
-      <tr>
-        <th>#</th>
-        <th>Nick</th>
-        <th>Kill</th>
-        <th>Death</th>
-        <th>Damage</th>
-        <th>Rank</th>
-      </tr>
+  <body style="background:#000;color:#fff;font-family:Arial">
+  <h1 style="text-align:center">RANK SİSTEMİ</h1>
+  <table border="1" style="margin:auto;width:90%">
+  <tr>
+    <th>#</th>
+    <th>Nick</th>
+    <th>Kill</th>
+    <th>Death</th>
+    <th>Damage</th>
+    <th>Rank</th>
+  </tr>
   `;
 
   result.rows.forEach((p, i) => {
@@ -190,7 +131,7 @@ app.get("/", async (req, res) => {
     `;
   });
 
-  html += `</table></body></html>`;
+  html += "</table></body></html>";
 
   res.send(html);
 });
@@ -199,7 +140,7 @@ app.get("/", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
-  console.log("Server çalışıyor:", PORT);
+  console.log("Server çalıştı:", PORT);
 
   await fetchAndSave();
   setInterval(fetchAndSave, 60000);
