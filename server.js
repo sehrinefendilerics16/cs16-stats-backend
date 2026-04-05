@@ -1,3 +1,5 @@
+require('./setup'); // SADECE İLK ÇALIŞTIRMADA GEREKLİ (SONRA SİLECEĞİZ)
+
 const express = require("express");
 const axios = require("axios");
 const cheerio = require("cheerio");
@@ -11,19 +13,6 @@ const pool = new Pool({
 });
 
 const TARGET_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
-
-// DB INIT
-async function initDB() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS players (
-      nick TEXT PRIMARY KEY,
-      total_kills INTEGER DEFAULT 0,
-      total_damage INTEGER DEFAULT 0,
-      last_kills INTEGER DEFAULT 0,
-      last_damage INTEGER DEFAULT 0
-    );
-  `);
-}
 
 // DELTA SCRAPER
 async function fetchAndSave() {
@@ -48,9 +37,11 @@ async function fetchAndSave() {
       );
 
       if (existing.rows.length === 0) {
-        // İlk kayıt
+        // İLK KAYIT
         await pool.query(`
-          INSERT INTO players (nick, total_kills, total_damage, last_kills, last_damage)
+          INSERT INTO players (
+            nick, total_kills, total_damage, last_kills, last_damage
+          )
           VALUES ($1, $2, $3, $2, $3)
         `, [nick, kills, damage]);
 
@@ -64,15 +55,14 @@ async function fetchAndSave() {
         if (kills >= p.last_kills) {
           deltaKills = kills - p.last_kills;
         } else {
-          // RESET olmuş
-          deltaKills = kills;
+          deltaKills = kills; // RESET
         }
 
         // DAMAGE DELTA
         if (damage >= p.last_damage) {
           deltaDamage = damage - p.last_damage;
         } else {
-          deltaDamage = damage;
+          deltaDamage = damage; // RESET
         }
 
         await pool.query(`
@@ -81,7 +71,8 @@ async function fetchAndSave() {
             total_kills = total_kills + $2,
             total_damage = total_damage + $3,
             last_kills = $4,
-            last_damage = $5
+            last_damage = $5,
+            updated_at = CURRENT_TIMESTAMP
           WHERE nick = $1
         `, [nick, deltaKills, deltaDamage, kills, damage]);
       }
@@ -149,9 +140,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log("Server çalışıyor:", PORT);
 
-  await initDB();
-  console.log("DB hazır");
-
   await fetchAndSave();
-  setInterval(fetchAndSave, 60000); // 1 dk
+  setInterval(fetchAndSave, 60000);
 });
