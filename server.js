@@ -27,20 +27,9 @@ async function initDB() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS player_history (
-      id SERIAL PRIMARY KEY,
-      nick TEXT,
-      kills INT,
-      deaths INT,
-      damage INT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
 }
 
-// ================= SCRAPE =================
+// ================= SCRAPER =================
 async function fetchPlayers() {
   const { data } = await axios.get(BASE_URL);
   const $ = cheerio.load(data);
@@ -93,41 +82,51 @@ async function fetchAndSave() {
         WHERE nick = $1
       `, [p.nick, p.kills, p.deaths, p.damage]);
     }
-
-    if (new Date().getMinutes() % 5 === 0) {
-      await pool.query(`
-        INSERT INTO player_history (nick,kills,deaths,damage)
-        VALUES ($1,$2,$3,$4)
-      `, [p.nick, p.kills, p.deaths, p.damage]);
-    }
   }
 }
 
 // ================= ANA SAYFA =================
 app.get("/", async (req, res) => {
 
+  const search = req.query.search || "";
+
   const result = await pool.query(`
     SELECT *, (total_kills-total_deaths) AS puan
-    FROM players ORDER BY puan DESC
-  `);
+    FROM players
+    WHERE LOWER(nick) LIKE LOWER($1)
+    ORDER BY puan DESC
+  `, [`%${search}%`]);
 
   const players = result.rows;
   const top3 = players.slice(0,3);
 
   let html = `
-  <html><head><style>
+  <html>
+  <head>
+  <style>
   body{background:#0f172a;color:white;font-family:Arial;margin:0}
   h1{text-align:center;padding:20px;background:#020617;margin:0}
+
   .top{display:flex;justify-content:center;gap:20px;margin:20px}
   .box{padding:15px 25px;border-radius:10px;font-weight:bold}
   .g{background:#facc15;color:black}
   .s{background:#cbd5f5;color:black}
   .b{background:#fb923c;color:black}
+
+  .search{text-align:center;margin:20px}
+  input{padding:10px;border-radius:8px;border:none}
+  button{padding:10px;border-radius:8px;border:none;background:#38bdf8}
+
   table{width:95%;margin:auto;border-collapse:collapse}
   th{background:#1e293b;padding:10px}
   td{padding:8px;text-align:center;border-bottom:1px solid #334155}
-  a{color:#38bdf8;text-decoration:none}
-  </style></head><body>
+
+  .good{color:#22c55e}
+  .bad{color:#ef4444}
+  </style>
+  </head>
+
+  <body>
 
   <h1>SEHRIN EFENDILERI</h1>
 
@@ -136,6 +135,11 @@ app.get("/", async (req, res) => {
     <div class="box s">🥈 ${top3[1]?.nick||""}</div>
     <div class="box b">🥉 ${top3[2]?.nick||""}</div>
   </div>
+
+  <form class="search">
+    <input name="search" placeholder="Oyuncu ara..." value="${search}" />
+    <button>Bul</button>
+  </form>
 
   <table>
   <tr>
@@ -155,10 +159,10 @@ app.get("/", async (req, res) => {
     html+=`
     <tr>
       <td>${i+1}</td>
-      <td><a href="/player/${encodeURIComponent(p.nick)}">${p.nick}</a></td>
+      <td>${p.nick}</td>
       <td>${p.total_kills}</td>
       <td>${p.total_deaths}</td>
-      <td>${kd}</td>
+      <td class="${kd>=2?'good':kd<1?'bad':''}">${kd}</td>
       <td>${p.total_damage}</td>
       <td>${p.puan}</td>
     </tr>`;
@@ -166,56 +170,6 @@ app.get("/", async (req, res) => {
 
   html+=`</table></body></html>`;
   res.send(html);
-});
-
-// ================= PROFİL =================
-app.get("/player/:nick", async (req, res) => {
-
-  const nick = decodeURIComponent(req.params.nick);
-
-  const p = (await pool.query("SELECT * FROM players WHERE nick=$1",[nick])).rows[0];
-  const history = (await pool.query("SELECT * FROM player_history WHERE nick=$1 ORDER BY created_at",[nick])).rows;
-
-  if (!p) return res.send("Oyuncu yok");
-
-  const kd = (p.total_kills/(p.total_deaths||1)).toFixed(2);
-
-  res.send(`
-  <html>
-  <head>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-  body{background:#0f172a;color:white;font-family:Arial}
-  .box{background:#1e293b;padding:15px;border-radius:10px;margin:10px}
-  </style>
-  </head>
-  <body>
-
-  <h1>${nick}</h1>
-
-  <div class="box">Kill: ${p.total_kills}</div>
-  <div class="box">Death: ${p.total_deaths}</div>
-  <div class="box">K/D: ${kd}</div>
-
-  <canvas id="c"></canvas>
-
-  <script>
-  const data = ${JSON.stringify(history)};
-  new Chart(document.getElementById("c"),{
-    type:"line",
-    data:{
-      labels:data.map(x=>new Date(x.created_at).toLocaleTimeString()),
-      datasets:[
-        {label:"Kill",data:data.map(x=>x.kills),borderColor:"green"},
-        {label:"Death",data:data.map(x=>x.deaths),borderColor:"red"},
-        {label:"Damage",data:data.map(x=>x.damage),borderColor:"orange"}
-      ]
-    }
-  })
-  </script>
-
-  </body></html>
-  `);
 });
 
 // ================= START =================
