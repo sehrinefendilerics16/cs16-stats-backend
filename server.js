@@ -12,6 +12,8 @@ const pool = new Pool({
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
+let isRunning = false; // 🔥 DOUBLE RUN KORUMA
+
 // ================= DB =================
 async function initDB() {
   await pool.query(`
@@ -38,9 +40,9 @@ async function initDB() {
 
 // ================= SCRAPER =================
 async function fetchPlayers() {
-  const { data } = await axios.get(BASE_URL);
-  const $ = cheerio.load(data);
+  const { data } = await axios.get(BASE_URL, { timeout: 5000 }); // 🔥 TIMEOUT
 
+  const $ = cheerio.load(data);
   const players = [];
 
   $("table.CSS_Table_Example tr").each((i, row) => {
@@ -62,10 +64,24 @@ async function fetchPlayers() {
   return players;
 }
 
-// ================= CORE LOGIC =================
+// ================= CORE =================
 async function fetchAndSave() {
+
+  if (isRunning) {
+    console.log("⛔ Zaten çalışıyor, skip");
+    return;
+  }
+
+  isRunning = true;
+
   try {
     const players = await fetchPlayers();
+
+    // 🔥 BOZUK VERİ KONTROLÜ
+    if (!players || players.length < 5) {
+      console.log("⚠️ Veri şüpheli, kayıt yapılmadı");
+      return;
+    }
 
     for (const p of players) {
       const res = await pool.query("SELECT * FROM players WHERE nick=$1", [p.nick]);
@@ -117,16 +133,17 @@ async function fetchAndSave() {
 
   } catch (err) {
     console.error("❌ HATA:", err.message);
+  } finally {
+    isRunning = false; // 🔥 KİLİT AÇ
   }
 }
 
-// ================= MANUEL TETİK =================
+// ================= ROUTES =================
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
   res.send("Manuel veri çekildi ✔");
 });
 
-// ================= STATUS =================
 app.get("/status", async (req, res) => {
   const result = await pool.query(`
     SELECT last_fetch FROM system_log
@@ -142,7 +159,7 @@ app.get("/status", async (req, res) => {
   `);
 });
 
-// ================= ANA SAYFA =================
+// ================= PANEL =================
 app.get("/", async (req, res) => {
 
   const search = req.query.search || "";
