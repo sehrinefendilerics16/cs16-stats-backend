@@ -28,7 +28,6 @@ async function initDB() {
     );
   `);
 
-  // ✅ EKLENDİ (log tablosu)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_log (
       id SERIAL PRIMARY KEY,
@@ -65,58 +64,60 @@ async function fetchPlayers() {
 
 // ================= CORE LOGIC =================
 async function fetchAndSave() {
-  const players = await fetchPlayers();
+  try {
+    const players = await fetchPlayers();
 
-  for (const p of players) {
-    const res = await pool.query("SELECT * FROM players WHERE nick=$1", [p.nick]);
+    for (const p of players) {
+      const res = await pool.query("SELECT * FROM players WHERE nick=$1", [p.nick]);
 
-    if (res.rows.length === 0) {
+      if (res.rows.length === 0) {
+        await pool.query(`
+          INSERT INTO players (nick,total_kills,total_deaths,total_damage,last_kills,last_deaths,last_damage)
+          VALUES ($1,$2,$3,$4,$2,$3,$4)
+        `, [p.nick, p.kills, p.deaths, p.damage]);
+        continue;
+      }
+
+      const old = res.rows[0];
+
+      if (
+        p.kills === old.last_kills &&
+        p.deaths === old.last_deaths &&
+        p.damage === old.last_damage
+      ) continue;
+
+      const isReset =
+        p.kills < old.last_kills ||
+        p.deaths < old.last_deaths ||
+        p.damage < old.last_damage;
+
+      const dk = isReset ? p.kills : p.kills - old.last_kills;
+      const dd = isReset ? p.deaths : p.deaths - old.last_deaths;
+      const dmg = isReset ? p.damage : p.damage - old.last_damage;
+
       await pool.query(`
-        INSERT INTO players (nick,total_kills,total_deaths,total_damage,last_kills,last_deaths,last_damage)
-        VALUES ($1,$2,$3,$4,$2,$3,$4)
-      `, [p.nick, p.kills, p.deaths, p.damage]);
-      continue;
+        UPDATE players SET
+          total_kills = total_kills + $2,
+          total_deaths = total_deaths + $3,
+          total_damage = total_damage + $4,
+          last_kills = $5,
+          last_deaths = $6,
+          last_damage = $7,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE nick = $1
+      `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
     }
 
-    const old = res.rows[0];
-
-    if (
-      p.kills === old.last_kills &&
-      p.deaths === old.last_deaths &&
-      p.damage === old.last_damage
-    ) {
-      continue;
-    }
-
-    const isReset =
-      p.kills < old.last_kills ||
-      p.deaths < old.last_deaths ||
-      p.damage < old.last_damage;
-
-    const dk = isReset ? p.kills : p.kills - old.last_kills;
-    const dd = isReset ? p.deaths : p.deaths - old.last_deaths;
-    const dmg = isReset ? p.damage : p.damage - old.last_damage;
+    console.log("✔ Veri güncellendi:", new Date().toLocaleTimeString());
 
     await pool.query(`
-      UPDATE players SET
-        total_kills = total_kills + $2,
-        total_deaths = total_deaths + $3,
-        total_damage = total_damage + $4,
-        last_kills = $5,
-        last_deaths = $6,
-        last_damage = $7,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE nick = $1
-    `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
+      INSERT INTO system_log (last_fetch)
+      VALUES (CURRENT_TIMESTAMP)
+    `);
+
+  } catch (err) {
+    console.error("❌ HATA:", err.message);
   }
-
-  console.log("✔ Veri güncellendi:", new Date().toLocaleTimeString());
-
-  // ✅ EKLENDİ (son çekim zamanı kaydı)
-  await pool.query(`
-    INSERT INTO system_log (last_fetch)
-    VALUES (CURRENT_TIMESTAMP)
-  `);
 }
 
 // ================= MANUEL TETİK =================
@@ -125,7 +126,7 @@ app.get("/force-update", async (req, res) => {
   res.send("Manuel veri çekildi ✔");
 });
 
-// ✅ EKLENDİ (durum kontrol endpoint)
+// ================= STATUS =================
 app.get("/status", async (req, res) => {
   const result = await pool.query(`
     SELECT last_fetch FROM system_log
