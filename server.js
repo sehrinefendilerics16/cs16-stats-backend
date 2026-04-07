@@ -13,6 +13,7 @@ const pool = new Pool({
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
 let isRunning = false;
+let cache = {}; // 🔥 FIX
 
 // ================= DB =================
 async function initDB() {
@@ -26,9 +27,14 @@ async function initDB() {
       last_kills INT DEFAULT 0,
       last_deaths INT DEFAULT 0,
       last_damage INT DEFAULT 0,
+      hs_percent FLOAT DEFAULT 0,
+      accuracy FLOAT DEFAULT 0,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  await pool.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS hs_percent FLOAT DEFAULT 0`);
+  await pool.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS accuracy FLOAT DEFAULT 0`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_log (
@@ -39,78 +45,75 @@ async function initDB() {
 }
 
 // ================= SCRAPER =================
-async function fetchPlayers() {
-  const { data } = await axios.get(BASE_URL, { timeout: 5000 });
+async function fetchPlayers(retry = 2) {
+  try {
+    const { data } = await axios.get(BASE_URL, { timeout: 5000 });
 
-  const $ = cheerio.load(data);
-  const players = [];
+    const $ = cheerio.load(data);
+    const players = [];
 
-  $("table.CSS_Table_Example tr").each((i, row) => {
-    if (i === 0) return;
+    $("table.CSS_Table_Example tr").each((i, row) => {
+      if (i === 0) return;
 
-    const cols = $(row).find("td");
-    if (cols.length !== 8) return;
+      const cols = $(row).find("td");
+      if (cols.length !== 8) return;
 
-    const nick = $(cols[1]).text().trim();
-    const kills = parseInt($(cols[2]).text()) || 0;
+      const nick = $(cols[1]).text().trim();
+      const kills = parseInt($(cols[2]).text()) || 0;
 
-    const hsText = $(cols[3]).text().trim();
-    const hsMatch = hsText.match(/\((.*?)%\)/);
-    const hsPercent = hsMatch ? parseFloat(hsMatch[1]) : 0;
+      const hsText = $(cols[3]).text().trim();
+      const hsMatch = hsText.match(/\((.*?)%\)/);
+      const hsPercent = hsMatch ? parseFloat(hsMatch[1]) : 0;
 
-    const deaths = parseInt($(cols[4]).text()) || 0;
+      const deaths = parseInt($(cols[4]).text()) || 0;
 
-    const accText = $(cols[6]).text().trim();
-    const accMatch = accText.match(/\((.*?)%\)/);
-    const accuracy = accMatch ? parseFloat(accMatch[1]) : 0;
+      const accText = $(cols[6]).text().trim();
+      const accMatch = accText.match(/\((.*?)%\)/);
+      const accuracy = accMatch ? parseFloat(accMatch[1]) : 0;
 
-    const damage = parseInt($(cols[7]).text()) || 0;
+      const damage = parseInt($(cols[7]).text()) || 0;
 
-    if (!nick || nick.includes("Toplam")) return;
+      if (!nick || nick.includes("Toplam")) return;
 
-    players.push({
-      nick,
-      kills,
-      deaths,
-      damage,
-      hsPercent,
-      accuracy
+      players.push({ nick, kills, deaths, damage, hsPercent, accuracy });
     });
-  });
 
-  return players;
+    return players;
+
+  } catch (err) {
+    if (retry > 0) {
+      console.log("⚠️ Retry...");
+      return fetchPlayers(retry - 1);
+    }
+    throw err;
+  }
 }
 
 // ================= CORE =================
 async function fetchAndSave() {
 
-  if (isRunning) {
-    console.log("⛔ Zaten çalışıyor, skip");
-    return;
-  }
-
+  if (isRunning) return;
   isRunning = true;
 
   try {
     const players = await fetchPlayers();
 
-    if (!players || players.length < 5) {
-      console.log("⚠️ Veri şüpheli, kayıt yapılmadı");
-      return;
-    }
+    if (!players || players.length < 5) return;
+
+    const all = await pool.query(`SELECT * FROM players`);
+    const map = new Map(all.rows.map(p => [p.nick, p]));
 
     for (const p of players) {
-      const res = await pool.query("SELECT * FROM players WHERE nick=$1", [p.nick]);
+      const old = map.get(p.nick);
 
-      if (res.rows.length === 0) {
+      if (!old) {
         await pool.query(`
-          INSERT INTO players (nick,total_kills,total_deaths,total_damage,last_kills,last_deaths,last_damage)
-          VALUES ($1,$2,$3,$4,$2,$3,$4)
-        `, [p.nick, p.kills, p.deaths, p.damage]);
+          INSERT INTO players 
+          (nick,total_kills,total_deaths,total_damage,last_kills,last_deaths,last_damage,hs_percent,accuracy)
+          VALUES ($1,$2,$3,$4,$2,$3,$4,$5,$6)
+        `, [p.nick, p.kills, p.deaths, p.damage, p.hsPercent, p.accuracy]);
         continue;
       }
-
-      const old = res.rows[0];
 
       if (
         p.kills === old.last_kills &&
@@ -135,50 +138,34 @@ async function fetchAndSave() {
           last_kills = $5,
           last_deaths = $6,
           last_damage = $7,
+          hs_percent = $8,
+          accuracy = $9,
           updated_at = CURRENT_TIMESTAMP
         WHERE nick = $1
-      `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage]);
+      `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage, p.hsPercent, p.accuracy]);
     }
 
-    console.log("✔ Veri güncellendi:", new Date().toLocaleTimeString());
-
-    await pool.query(`
-      INSERT INTO system_log (last_fetch)
-      VALUES (CURRENT_TIMESTAMP)
-    `);
+    await pool.query(`INSERT INTO system_log (last_fetch) VALUES (CURRENT_TIMESTAMP)`);
 
   } catch (err) {
-    console.error("❌ HATA:", err.message);
+    console.error("❌", err.message);
   } finally {
     isRunning = false;
   }
 }
 
-// ================= ROUTES =================
-app.get("/force-update", async (req, res) => {
-  await fetchAndSave();
-  res.send("Manuel veri çekildi ✔");
-});
-
-app.get("/status", async (req, res) => {
-  const result = await pool.query(`
-    SELECT last_fetch FROM system_log
-    ORDER BY id DESC
-    LIMIT 1
-  `);
-
-  const last = result.rows[0];
-
-  res.send(`
-    <h2>Son Veri Çekim Zamanı</h2>
-    <p>${last ? last.last_fetch : "Henüz veri yok"}</p>
-  `);
-});
-
 // ================= PANEL =================
 app.get("/", async (req, res) => {
 
   const search = req.query.search || "";
+
+  // 🔥 CACHE FIX (search bazlı)
+  if (
+    cache[search] &&
+    Date.now() - cache[search].time < 30000
+  ) {
+    return res.send(cache[search].data);
+  }
 
   const result = await pool.query(`
     SELECT *,
@@ -190,20 +177,20 @@ app.get("/", async (req, res) => {
 
   let players = result.rows;
 
-  // 🔥 FINAL SCORE (HS + ACC DAHİL)
   players = players.map(p => {
     const kd = p.kd || 0;
-
-    const hs = p.hsPercent || 0;
+    const hs = p.hs_percent || 0;
     const acc = p.accuracy || 0;
 
-    const score =
-      (p.total_kills - p.total_deaths) +
-      (kd * 10) +
-      (hs * 2) +
-      (acc * 1.5);
+    const activity = Math.min(p.total_kills / 50, 1);
 
-    return { ...p, score };
+    const score =
+      ((p.total_kills - p.total_deaths) * 0.5) +
+      (kd * 15) +
+      (hs * 1.5) +
+      (acc * 1.2);
+
+    return { ...p, score: score * activity };
   });
 
   players.sort((a,b)=> b.score - a.score);
@@ -216,21 +203,17 @@ app.get("/", async (req, res) => {
   <style>
   body{background:#0f172a;color:white;font-family:Arial;margin:0}
   h1{text-align:center;padding:20px;background:#020617;margin:0}
-
   .top{display:flex;justify-content:center;gap:20px;margin:20px}
   .box{padding:15px 25px;border-radius:10px;font-weight:bold}
   .g{background:#facc15;color:black}
   .s{background:#cbd5f5;color:black}
   .b{background:#fb923c;color:black}
-
   .search{text-align:center;margin:20px}
   input{padding:10px;border-radius:8px;border:none}
   button{padding:10px;border-radius:8px;border:none;background:#38bdf8}
-
   table{width:95%;margin:auto;border-collapse:collapse}
   th{background:#1e293b;padding:10px}
   td{padding:8px;text-align:center;border-bottom:1px solid #334155}
-
   .good{color:#22c55e}
   .bad{color:#ef4444}
   </style>
@@ -259,7 +242,7 @@ app.get("/", async (req, res) => {
     <th>Ölüm</th>
     <th>K/D</th>
     <th>Hasar</th>
-    <th>Puan</th>
+    <th>SKOR</th>
   </tr>
   `;
 
@@ -279,6 +262,9 @@ app.get("/", async (req, res) => {
   });
 
   html+=`</table></body></html>`;
+
+  cache[search] = { data: html, time: Date.now() }; // 🔥 FIX
+
   res.send(html);
 });
 
@@ -286,10 +272,7 @@ app.get("/", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
-  console.log("Server çalıştı:", PORT);
-
   await initDB();
   await fetchAndSave();
-
   setInterval(fetchAndSave, 60000);
 });
