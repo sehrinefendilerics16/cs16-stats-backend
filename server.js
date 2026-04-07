@@ -227,13 +227,12 @@ app.get("/", async (req, res) => {
 
     const activity = Math.min(p.total_kills / 50, 1);
 
-    // 🔥 YENİ DENGELİ SKOR
     const score =
-      ((p.total_kills - p.total_deaths) * 0.8) +   // kill farkı ↑
-      (kd * 8) +                                  // kd ↓
-      (hs * 2.5) +                                // hs ↑
-      (acc * 2) +                                 // accuracy ↑
-      (p.total_damage / 1000);                     // 🔥 hasar eklendi
+      ((p.total_kills - p.total_deaths) * 0.8) +
+      (kd * 8) +
+      (hs * 2.5) +
+      (acc * 2) +
+      (p.total_damage / 1000);
 
     return { ...p, score: score * activity };
   });
@@ -253,6 +252,10 @@ app.get("/", async (req, res) => {
   .g{background:#facc15;color:black}
   .s{background:#cbd5f5;color:black}
   .b{background:#fb923c;color:black}
+  .search{text-align:center;margin:15px}
+  input{padding:10px;border-radius:8px;border:none}
+  button{padding:10px;border-radius:8px;border:none;background:#38bdf8}
+  .info{text-align:center;color:#94a3b8;margin-top:10px}
   table{width:95%;margin:auto;border-collapse:collapse}
   th{background:#1e293b;padding:10px}
   td{padding:8px;text-align:center;border-bottom:1px solid #334155}
@@ -263,11 +266,20 @@ app.get("/", async (req, res) => {
 
   <h1>SEHRIN EFENDILERI</h1>
 
+  <div class="info">
+    ⚠️ Sıralama verileri 30.03.2026 tarihinden itibaren hesaplanmaktadır.
+  </div>
+
   <div class="top">
     <div class="box g">🥇 ${top3[0]?.nick||""}</div>
     <div class="box s">🥈 ${top3[1]?.nick||""}</div>
     <div class="box b">🥉 ${top3[2]?.nick||""}</div>
   </div>
+
+  <form class="search">
+    <input name="search" placeholder="Oyuncu ara..." value="${search}">
+    <button type="submit">Ara</button>
+  </form>
 
   <table>
   <tr>
