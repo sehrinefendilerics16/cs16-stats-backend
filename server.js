@@ -12,7 +12,7 @@ const pool = new Pool({
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 
-let isRunning = false; // 🔥 DOUBLE RUN KORUMA
+let isRunning = false;
 
 // ================= DB =================
 async function initDB() {
@@ -40,7 +40,7 @@ async function initDB() {
 
 // ================= SCRAPER =================
 async function fetchPlayers() {
-  const { data } = await axios.get(BASE_URL, { timeout: 5000 }); // 🔥 TIMEOUT
+  const { data } = await axios.get(BASE_URL, { timeout: 5000 });
 
   const $ = cheerio.load(data);
   const players = [];
@@ -77,7 +77,6 @@ async function fetchAndSave() {
   try {
     const players = await fetchPlayers();
 
-    // 🔥 BOZUK VERİ KONTROLÜ
     if (!players || players.length < 5) {
       console.log("⚠️ Veri şüpheli, kayıt yapılmadı");
       return;
@@ -134,7 +133,7 @@ async function fetchAndSave() {
   } catch (err) {
     console.error("❌ HATA:", err.message);
   } finally {
-    isRunning = false; // 🔥 KİLİT AÇ
+    isRunning = false;
   }
 }
 
@@ -165,10 +164,16 @@ app.get("/", async (req, res) => {
   const search = req.query.search || "";
 
   const result = await pool.query(`
-    SELECT *, (total_kills-total_deaths) AS puan
+    SELECT *,
+      (total_kills - total_deaths) AS puan,
+      (total_kills::float / GREATEST(total_deaths,1)) AS kd,
+      (
+        (total_kills - total_deaths) +
+        ((total_kills::float / GREATEST(total_deaths,1)) * 10)
+      ) AS score
     FROM players
     WHERE LOWER(nick) LIKE LOWER($1)
-    ORDER BY puan DESC
+    ORDER BY score DESC
   `, [`%${search}%`]);
 
   const players = result.rows;
@@ -223,12 +228,12 @@ app.get("/", async (req, res) => {
     <th>Ölüm</th>
     <th>K/D</th>
     <th>Hasar</th>
-    <th>Puan</th>
+    <th>Score</th>
   </tr>
   `;
 
   players.forEach((p,i)=>{
-    const kd = (p.total_kills/(p.total_deaths||1)).toFixed(2);
+    const kd = p.kd.toFixed(2);
 
     html+=`
     <tr>
@@ -238,7 +243,7 @@ app.get("/", async (req, res) => {
       <td>${p.total_deaths}</td>
       <td class="${kd>=2?'good':kd<1?'bad':''}">${kd}</td>
       <td>${p.total_damage}</td>
-      <td>${p.puan}</td>
+      <td>${Math.round(p.score)}</td>
     </tr>`;
   });
 
