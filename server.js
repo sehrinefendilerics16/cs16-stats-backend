@@ -190,13 +190,12 @@ app.get("/", async (req, res) => {
 
   let players = result.rows;
 
-  // 🔥 YENİ AKILLI SCORE
+  // 🔥 FINAL SCORE (HS + ACC DAHİL)
   players = players.map(p => {
     const kd = p.kd || 0;
 
-    // hs ve accuracy DB'de yok → 0 kabul
-    const hs = 0;
-    const acc = 0;
+    const hs = p.hsPercent || 0;
+    const acc = p.accuracy || 0;
 
     const score =
       (p.total_kills - p.total_deaths) +
@@ -207,7 +206,6 @@ app.get("/", async (req, res) => {
     return { ...p, score };
   });
 
-  // 🔥 JS tarafında sıralama
   players.sort((a,b)=> b.score - a.score);
 
   const top3 = players.slice(0,3);
