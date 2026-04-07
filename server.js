@@ -161,8 +161,6 @@ async function fetchAndSave() {
 }
 
 // ================= ROUTES =================
-
-// STATUS FIX (TR SAAT + FORMAT)
 app.get("/status", async (req, res) => {
   const result = await pool.query(`
     SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1
@@ -198,13 +196,12 @@ app.get("/status", async (req, res) => {
   `);
 });
 
-// FORCE UPDATE
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
   res.send("OK");
 });
 
-// ================= PANEL (ESKİ HAL) =================
+// ================= PANEL =================
 app.get("/", async (req, res) => {
 
   const search = (req.query.search || "").toLowerCase();
@@ -230,11 +227,13 @@ app.get("/", async (req, res) => {
 
     const activity = Math.min(p.total_kills / 50, 1);
 
+    // 🔥 YENİ DENGELİ SKOR
     const score =
-      ((p.total_kills - p.total_deaths) * 0.5) +
-      (kd * 15) +
-      (hs * 1.5) +
-      (acc * 1.2);
+      ((p.total_kills - p.total_deaths) * 0.8) +   // kill farkı ↑
+      (kd * 8) +                                  // kd ↓
+      (hs * 2.5) +                                // hs ↑
+      (acc * 2) +                                 // accuracy ↑
+      (p.total_damage / 1000);                     // 🔥 hasar eklendi
 
     return { ...p, score: score * activity };
   });
