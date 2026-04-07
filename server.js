@@ -173,17 +173,9 @@ app.get("/player/:nick", async (req, res) => {
   `, [nick]);
 
   const p = result.rows[0];
-
   if (!p) return res.send("Oyuncu bulunamadı");
 
   const kd = p.kd || 0;
-  const hs = p.hs_percent || 0;
-  const acc = p.accuracy || 0;
-
-  let yorum = "Ortalama oyuncu";
-  if (kd > 2 && acc > 20) yorum = "Üst düzey aim oyuncusu";
-  else if (kd > 1.5) yorum = "İyi oyuncu";
-  else if (kd < 1) yorum = "Gelişmesi gerekiyor";
 
   res.send(`
   <html>
@@ -191,31 +183,28 @@ app.get("/player/:nick", async (req, res) => {
   <style>
   body{background:#0f172a;color:white;font-family:Arial;text-align:center}
   .box{margin-top:50px}
-  .stat{margin:10px}
   .good{color:#22c55e}
   .bad{color:#ef4444}
-  .mid{color:#eab308}
   a{color:#38bdf8}
   </style>
   </head>
   <body>
   <div class="box">
     <h1>${escapeHTML(p.nick)}</h1>
-    <div class="stat">K/D: <span class="${kd>=2?'good':kd<1?'bad':'mid'}">${kd.toFixed(2)}</span></div>
-    <div class="stat">Kill: ${p.total_kills}</div>
-    <div class="stat">Death: ${p.total_deaths}</div>
-    <div class="stat">Damage: ${p.total_damage}</div>
-    <div class="stat">HS: %${hs}</div>
-    <div class="stat">Accuracy: %${acc}</div>
-    <h3>${yorum}</h3>
-    <br><a href="/">← Geri dön</a>
+    <p>K/D: <span class="${kd>=2?'good':kd<1?'bad':''}">${kd.toFixed(2)}</span></p>
+    <p>Kill: ${p.total_kills}</p>
+    <p>Death: ${p.total_deaths}</p>
+    <p>Hasar: ${p.total_damage}</p>
+    <p>HS: %${p.hs_percent}</p>
+    <p>Accuracy: %${p.accuracy}</p>
+    <br><a href="/">← Geri</a>
   </div>
   </body>
   </html>
   `);
 });
 
-// ================= STATUS =================
+// ================= ROUTES =================
 app.get("/status", async (req, res) => {
   const result = await pool.query(`
     SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1
@@ -225,17 +214,32 @@ app.get("/status", async (req, res) => {
 
   res.send(`
   <html>
-  <body style="background:#0f172a;color:white;text-align:center;padding-top:50px">
-    <h1>Sistem Durumu</h1>
-    <p>
-      ${last ? new Date(last).toLocaleString("tr-TR",{timeZone:"Europe/Istanbul"}) : "Veri yok"}
-    </p>
+  <head>
+  <style>
+    body {background:#0f172a;color:white;font-family:Arial;text-align:center;padding-top:50px;}
+    .box {background:#020617;display:inline-block;padding:30px;border-radius:12px;}
+    .time {color:#38bdf8;font-size:18px;}
+  </style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>📊 Sistem Durumu</h1>
+      <div class="time">
+        ${last ? new Date(last).toLocaleString("tr-TR", {
+          timeZone: "Europe/Istanbul",
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        }) : "Veri yok"}
+      </div>
+    </div>
   </body>
   </html>
   `);
 });
 
-// ================= PANEL =================
 app.get("/", async (req, res) => {
 
   const search = (req.query.search || "").toLowerCase();
@@ -278,14 +282,19 @@ app.get("/", async (req, res) => {
   body{background:#0f172a;color:white;font-family:Arial;margin:0}
   h1{text-align:center;padding:20px;background:#020617;margin:0}
   .top{display:flex;justify-content:center;gap:20px;margin:20px}
-  .box{padding:15px;border-radius:10px}
+  .box{padding:15px 25px;border-radius:10px;font-weight:bold}
   .g{background:#facc15;color:black}
   .s{background:#cbd5f5;color:black}
   .b{background:#fb923c;color:black}
-  .search{text-align:center}
-  input{padding:10px;border-radius:8px}
-  table{width:95%;margin:auto}
-  td,th{padding:8px;text-align:center}
+  .search{text-align:center;margin:15px}
+  input{padding:10px;border-radius:8px;border:none}
+  button{padding:10px;border-radius:8px;border:none;background:#38bdf8}
+  .info{text-align:center;color:#94a3b8;margin-top:10px}
+  table{width:95%;margin:auto;border-collapse:collapse}
+  th{background:#1e293b;padding:10px}
+  td{padding:8px;text-align:center;border-bottom:1px solid #334155}
+  a{color:white;text-decoration:none}
+  a:hover{color:#38bdf8}
   </style>
   </head>
 
@@ -293,23 +302,31 @@ app.get("/", async (req, res) => {
 
   <h1>SEHRIN EFENDILERI</h1>
 
-  <div style="text-align:center;margin-top:10px;color:#94a3b8">
-  ⚠️ Sıralama verileri 30.03.2026 tarihinden itibaren hesaplanmaktadır.
+  <div class="info">
+    ⚠️ Sıralama verileri 30.03.2026 tarihinden itibaren hesaplanmaktadır.
   </div>
 
   <div class="top">
-    <div class="box g">${top3[0]?.nick||""}</div>
-    <div class="box s">${top3[1]?.nick||""}</div>
-    <div class="box b">${top3[2]?.nick||""}</div>
+    <div class="box g">🥇 ${top3[0]?.nick||""}</div>
+    <div class="box s">🥈 ${top3[1]?.nick||""}</div>
+    <div class="box b">🥉 ${top3[2]?.nick||""}</div>
   </div>
 
   <form class="search">
     <input name="search" placeholder="Oyuncu ara..." value="${search}">
-    <button>Ara</button>
+    <button type="submit">Ara</button>
   </form>
 
   <table>
-  <tr><th>#</th><th>Oyuncu</th><th>K/D</th><th>Skor</th></tr>
+  <tr>
+    <th>#</th>
+    <th>Oyuncu</th>
+    <th>Öldürme</th>
+    <th>Ölüm</th>
+    <th>K/D</th>
+    <th>Hasar</th>
+    <th>SKOR</th>
+  </tr>
   `;
 
   players.forEach((p,i)=>{
@@ -317,7 +334,10 @@ app.get("/", async (req, res) => {
     <tr>
       <td>${i+1}</td>
       <td><a href="/player/${encodeURIComponent(p.nick)}">${escapeHTML(p.nick)}</a></td>
+      <td>${p.total_kills}</td>
+      <td>${p.total_deaths}</td>
       <td>${p.kd.toFixed(2)}</td>
+      <td>${p.total_damage}</td>
       <td>${Math.round(p.score)}</td>
     </tr>`;
   });
