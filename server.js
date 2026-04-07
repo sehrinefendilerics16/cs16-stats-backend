@@ -160,50 +160,6 @@ async function fetchAndSave() {
   }
 }
 
-// ================= PLAYER DETAY =================
-app.get("/player/:nick", async (req, res) => {
-
-  const nick = req.params.nick;
-
-  const result = await pool.query(`
-    SELECT *,
-      (total_kills::float / GREATEST(total_deaths,1)) AS kd
-    FROM players
-    WHERE nick = $1
-  `, [nick]);
-
-  const p = result.rows[0];
-  if (!p) return res.send("Oyuncu bulunamadı");
-
-  const kd = p.kd || 0;
-
-  res.send(`
-  <html>
-  <head>
-  <style>
-  body{background:#0f172a;color:white;font-family:Arial;text-align:center}
-  .box{margin-top:50px}
-  .good{color:#22c55e}
-  .bad{color:#ef4444}
-  a{color:#38bdf8}
-  </style>
-  </head>
-  <body>
-  <div class="box">
-    <h1>${escapeHTML(p.nick)}</h1>
-    <p>K/D: <span class="${kd>=2?'good':kd<1?'bad':''}">${kd.toFixed(2)}</span></p>
-    <p>Kill: ${p.total_kills}</p>
-    <p>Death: ${p.total_deaths}</p>
-    <p>Hasar: ${p.total_damage}</p>
-    <p>HS: %${p.hs_percent}</p>
-    <p>Accuracy: %${p.accuracy}</p>
-    <br><a href="/">← Geri</a>
-  </div>
-  </body>
-  </html>
-  `);
-});
-
 // ================= ROUTES =================
 app.get("/status", async (req, res) => {
   const result = await pool.query(`
@@ -240,6 +196,12 @@ app.get("/status", async (req, res) => {
   `);
 });
 
+app.get("/force-update", async (req, res) => {
+  await fetchAndSave();
+  res.send("OK");
+});
+
+// ================= PANEL =================
 app.get("/", async (req, res) => {
 
   const search = (req.query.search || "").toLowerCase();
@@ -250,6 +212,7 @@ app.get("/", async (req, res) => {
 
   const result = await pool.query(`
     SELECT *,
+      (total_kills - total_deaths) AS puan,
       (total_kills::float / GREATEST(total_deaths,1)) AS kd
     FROM players
     WHERE LOWER(nick) LIKE $1
@@ -259,13 +222,16 @@ app.get("/", async (req, res) => {
 
   players = players.map(p => {
     const kd = p.kd || 0;
+    const hs = p.hs_percent || 0;
+    const acc = p.accuracy || 0;
+
     const activity = Math.min(p.total_kills / 50, 1);
 
     const score =
       ((p.total_kills - p.total_deaths) * 0.8) +
       (kd * 8) +
-      (p.hs_percent * 2.5) +
-      (p.accuracy * 2) +
+      (hs * 2.5) +
+      (acc * 2) +
       (p.total_damage / 1000);
 
     return { ...p, score: score * activity };
@@ -293,8 +259,6 @@ app.get("/", async (req, res) => {
   table{width:95%;margin:auto;border-collapse:collapse}
   th{background:#1e293b;padding:10px}
   td{padding:8px;text-align:center;border-bottom:1px solid #334155}
-  a{color:white;text-decoration:none}
-  a:hover{color:#38bdf8}
   </style>
   </head>
 
@@ -333,7 +297,7 @@ app.get("/", async (req, res) => {
     html+=`
     <tr>
       <td>${i+1}</td>
-      <td><a href="/player/${encodeURIComponent(p.nick)}">${escapeHTML(p.nick)}</a></td>
+      <td>${escapeHTML(p.nick)}</td>
       <td>${p.total_kills}</td>
       <td>${p.total_deaths}</td>
       <td>${p.kd.toFixed(2)}</td>
