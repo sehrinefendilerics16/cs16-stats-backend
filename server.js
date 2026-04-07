@@ -15,6 +15,17 @@ const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173
 let isRunning = false;
 let cache = {};
 
+// 🔥 XSS FIX
+function escapeHTML(str) {
+  return str.replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#039;"
+  }[m]));
+}
+
 // ================= DB =================
 async function initDB() {
   await pool.query(`
@@ -33,8 +44,7 @@ async function initDB() {
     );
   `);
 
-  await pool.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS hs_percent FLOAT DEFAULT 0`);
-  await pool.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS accuracy FLOAT DEFAULT 0`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_nick ON players (LOWER(nick));`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_log (
@@ -81,9 +91,7 @@ async function fetchPlayers(retry = 2) {
     return players;
 
   } catch (err) {
-    if (retry > 0) {
-      return fetchPlayers(retry - 1);
-    }
+    if (retry > 0) return fetchPlayers(retry - 1);
     throw err;
   }
 }
@@ -96,7 +104,6 @@ async function fetchAndSave() {
 
   try {
     const players = await fetchPlayers();
-
     if (!players || players.length < 5) return;
 
     const all = await pool.query(`SELECT * FROM players`);
@@ -146,7 +153,7 @@ async function fetchAndSave() {
 
     await pool.query(`INSERT INTO system_log (last_fetch) VALUES (CURRENT_TIMESTAMP)`);
 
-    cache = {}; // cache temizle
+    cache = {}; // cache reset
 
   } catch (err) {
     console.error(err.message);
@@ -156,28 +163,29 @@ async function fetchAndSave() {
 }
 
 // ================= ROUTES =================
-app.get("/force-update", async (req, res) => {
-  await fetchAndSave();
-  res.send("OK");
+app.get("/status", async (req, res) => {
+  const result = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
+  const last = result.rows[0]?.last_fetch;
+
+  res.send(`
+  <html><body style="background:#0f172a;color:white;text-align:center;padding-top:50px;font-family:Arial">
+  <h1>📊 Sistem Durumu</h1>
+  <p>${last ? new Date(last).toLocaleString() : "Veri yok"}</p>
+  </body></html>
+  `);
 });
 
-app.get("/status", async (req, res) => {
-  const result = await pool.query(`
-    SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1
-  `);
-
-  res.send(result.rows[0] || {});
+app.get("/force-update", async (req, res) => {
+  await fetchAndSave();
+  res.send(`<html><body style="background:#0f172a;color:white;text-align:center;padding-top:50px">✔ Güncellendi</body></html>`);
 });
 
 // ================= PANEL =================
 app.get("/", async (req, res) => {
 
-  const search = req.query.search || "";
+  const search = (req.query.search || "").toLowerCase();
 
-  if (
-    cache[search] &&
-    Date.now() - cache[search].time < 30000
-  ) {
+  if (cache[search] && Date.now() - cache[search].time < 30000) {
     return res.send(cache[search].data);
   }
 
@@ -186,7 +194,7 @@ app.get("/", async (req, res) => {
       (total_kills - total_deaths) AS puan,
       (total_kills::float / GREATEST(total_deaths,1)) AS kd
     FROM players
-    WHERE LOWER(nick) LIKE LOWER($1)
+    WHERE LOWER(nick) LIKE $1
   `, [`%${search}%`]);
 
   let players = result.rows;
@@ -209,72 +217,13 @@ app.get("/", async (req, res) => {
 
   players.sort((a,b)=> b.score - a.score);
 
-  const top3 = players.slice(0,3);
-
-  let html = `
-  <html>
-  <head>
-  <style>
-  body{background:#0f172a;color:white;font-family:Arial;margin:0}
-  h1{text-align:center;padding:20px;background:#020617;margin:0}
-  .top{display:flex;justify-content:center;gap:20px;margin:20px}
-  .box{padding:15px 25px;border-radius:10px;font-weight:bold}
-  .g{background:#facc15;color:black}
-  .s{background:#cbd5f5;color:black}
-  .b{background:#fb923c;color:black}
-  .search{text-align:center;margin:20px}
-  input{padding:10px;border-radius:8px;border:none}
-  button{padding:10px;border-radius:8px;border:none;background:#38bdf8}
-  table{width:95%;margin:auto;border-collapse:collapse}
-  th{background:#1e293b;padding:10px}
-  td{padding:8px;text-align:center;border-bottom:1px solid #334155}
-  .good{color:#22c55e}
-  .bad{color:#ef4444}
-  </style>
-  </head>
-  <body>
-
-  <h1>SEHRIN EFENDILERI</h1>
-
-  <div class="top">
-    <div class="box g">🥇 ${top3[0]?.nick||""}</div>
-    <div class="box s">🥈 ${top3[1]?.nick||""}</div>
-    <div class="box b">🥉 ${top3[2]?.nick||""}</div>
-  </div>
-
-  <form class="search">
-    <input name="search" placeholder="Oyuncu ara..." value="${search}" />
-    <button>Bul</button>
-  </form>
-
-  <table>
-  <tr>
-    <th>#</th>
-    <th>Oyuncu</th>
-    <th>Öldürme</th>
-    <th>Ölüm</th>
-    <th>K/D</th>
-    <th>Hasar</th>
-    <th>SKOR</th>
-  </tr>
-  `;
+  let html = `<html><body style="background:#0f172a;color:white;font-family:Arial">`;
 
   players.forEach((p,i)=>{
-    const kd = p.kd.toFixed(2);
-
-    html+=`
-    <tr>
-      <td>${i+1}</td>
-      <td>${p.nick}</td>
-      <td>${p.total_kills}</td>
-      <td>${p.total_deaths}</td>
-      <td class="${kd>=2?'good':kd<1?'bad':''}">${kd}</td>
-      <td>${p.total_damage}</td>
-      <td>${Math.round(p.score)}</td>
-    </tr>`;
+    html += `<div>${i+1}. ${escapeHTML(p.nick)} - ${Math.round(p.score)}</div>`;
   });
 
-  html+=`</table></body></html>`;
+  html += `</body></html>`;
 
   cache[search] = { data: html, time: Date.now() };
 
