@@ -53,12 +53,29 @@ async function fetchPlayers() {
 
     const nick = $(cols[1]).text().trim();
     const kills = parseInt($(cols[2]).text()) || 0;
+
+    const hsText = $(cols[3]).text().trim();
+    const hsMatch = hsText.match(/\((.*?)%\)/);
+    const hsPercent = hsMatch ? parseFloat(hsMatch[1]) : 0;
+
     const deaths = parseInt($(cols[4]).text()) || 0;
+
+    const accText = $(cols[6]).text().trim();
+    const accMatch = accText.match(/\((.*?)%\)/);
+    const accuracy = accMatch ? parseFloat(accMatch[1]) : 0;
+
     const damage = parseInt($(cols[7]).text()) || 0;
 
     if (!nick || nick.includes("Toplam")) return;
 
-    players.push({ nick, kills, deaths, damage });
+    players.push({
+      nick,
+      kills,
+      deaths,
+      damage,
+      hsPercent,
+      accuracy
+    });
   });
 
   return players;
@@ -166,17 +183,33 @@ app.get("/", async (req, res) => {
   const result = await pool.query(`
     SELECT *,
       (total_kills - total_deaths) AS puan,
-      (total_kills::float / GREATEST(total_deaths,1)) AS kd,
-      (
-        (total_kills - total_deaths) +
-        ((total_kills::float / GREATEST(total_deaths,1)) * 10)
-      ) AS score
+      (total_kills::float / GREATEST(total_deaths,1)) AS kd
     FROM players
     WHERE LOWER(nick) LIKE LOWER($1)
-    ORDER BY score DESC
   `, [`%${search}%`]);
 
-  const players = result.rows;
+  let players = result.rows;
+
+  // 🔥 YENİ AKILLI SCORE
+  players = players.map(p => {
+    const kd = p.kd || 0;
+
+    // hs ve accuracy DB'de yok → 0 kabul
+    const hs = 0;
+    const acc = 0;
+
+    const score =
+      (p.total_kills - p.total_deaths) +
+      (kd * 10) +
+      (hs * 2) +
+      (acc * 1.5);
+
+    return { ...p, score };
+  });
+
+  // 🔥 JS tarafında sıralama
+  players.sort((a,b)=> b.score - a.score);
+
   const top3 = players.slice(0,3);
 
   let html = `
@@ -228,7 +261,7 @@ app.get("/", async (req, res) => {
     <th>Ölüm</th>
     <th>K/D</th>
     <th>Hasar</th>
-    <th>Score</th>
+    <th>Puan</th>
   </tr>
   `;
 
