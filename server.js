@@ -1,6 +1,7 @@
 const express = require("express");
 const axios = require("axios");
 const cheerio = require("cheerio");
+const crypto = require("crypto");
 const { Pool } = require("pg");
 
 const app = express();
@@ -14,6 +15,25 @@ const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173
 
 let isRunning = false;
 let cache = {};
+const CACHE_LIMIT = 50;
+
+// ================= CACHE CLEAN =================
+function cleanCache() {
+  const now = Date.now();
+
+  for (const key in cache) {
+    if (now - cache[key].time > 30000) {
+      delete cache[key];
+    }
+  }
+
+  const keys = Object.keys(cache);
+  if (keys.length > CACHE_LIMIT) {
+    const sorted = keys.sort((a, b) => cache[a].time - cache[b].time);
+    const toDelete = sorted.slice(0, keys.length - CACHE_LIMIT);
+    toDelete.forEach(k => delete cache[k]);
+  }
+}
 
 // ================= XSS =================
 function escapeHTML(str) {
@@ -49,7 +69,8 @@ async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_log (
       id SERIAL PRIMARY KEY,
-      last_fetch TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      last_fetch TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_hash TEXT
     );
   `);
 }
@@ -96,6 +117,11 @@ async function fetchPlayers(retry = 2) {
   }
 }
 
+// ================= HASH =================
+function generateHash(players) {
+  return crypto.createHash("md5").update(JSON.stringify(players)).digest("hex");
+}
+
 // ================= CORE =================
 async function fetchAndSave() {
   if (isRunning) return;
@@ -105,7 +131,24 @@ async function fetchAndSave() {
     const players = await fetchPlayers();
     if (!players || players.length < 5) return;
 
-    const all = await pool.query(`SELECT * FROM players`);
+    const newHash = generateHash(players);
+
+    const lastHashRes = await pool.query(`
+      SELECT last_hash FROM system_log ORDER BY id DESC LIMIT 1
+    `);
+
+    const lastHash = lastHashRes.rows[0]?.last_hash;
+
+    // 🔥 HASH AYNI → SADECE LOG AT
+    if (lastHash && lastHash === newHash) {
+      await pool.query(`
+        INSERT INTO system_log (last_fetch, last_hash) 
+        VALUES (CURRENT_TIMESTAMP, $1)
+      `, [newHash]);
+      return;
+    }
+
+    const all = await pool.query(`SELECT nick, last_kills, last_deaths, last_damage, hs_percent, accuracy FROM players`);
     const map = new Map(all.rows.map(p => [p.nick, p]));
 
     for (const p of players) {
@@ -120,11 +163,33 @@ async function fetchAndSave() {
         continue;
       }
 
+      // 🔥 HİÇBİR ŞEY DEĞİŞMEDİ → SKIP
+      if (
+        p.kills === old.last_kills &&
+        p.deaths === old.last_deaths &&
+        p.damage === old.last_damage &&
+        p.hsPercent === old.hs_percent &&
+        p.accuracy === old.accuracy
+      ) {
+        continue;
+      }
+
+      // 🔥 SADECE HS/ACC DEĞİŞTİ
       if (
         p.kills === old.last_kills &&
         p.deaths === old.last_deaths &&
         p.damage === old.last_damage
-      ) continue;
+      ) {
+        await pool.query(`
+          UPDATE players SET
+            hs_percent = $2,
+            accuracy = $3,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE nick = $1
+        `, [p.nick, p.hsPercent, p.accuracy]);
+
+        continue;
+      }
 
       const isReset =
         p.kills < old.last_kills ||
@@ -150,7 +215,11 @@ async function fetchAndSave() {
       `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage, p.hsPercent, p.accuracy]);
     }
 
-    await pool.query(`INSERT INTO system_log (last_fetch) VALUES (CURRENT_TIMESTAMP)`);
+    await pool.query(`
+      INSERT INTO system_log (last_fetch, last_hash) 
+      VALUES (CURRENT_TIMESTAMP, $1)
+    `, [newHash]);
+
     cache = {};
 
   } catch (err) {
@@ -204,6 +273,8 @@ app.get("/force-update", async (req, res) => {
 // ================= PANEL =================
 app.get("/", async (req, res) => {
 
+  cleanCache();
+
   const search = (req.query.search || "").toLowerCase();
 
   if (cache[search] && Date.now() - cache[search].time < 30000) {
@@ -224,15 +295,17 @@ app.get("/", async (req, res) => {
     const kd = p.kd || 0;
     const hs = p.hs_percent || 0;
     const acc = p.accuracy || 0;
+    const dmg = p.total_damage || 0;
 
-    const activity = Math.min(p.total_kills / 50, 1);
+    const activity = Math.min(p.total_kills / 150, 1);
+    const accSafe = Math.min(acc, 35);
 
     const score =
-      ((p.total_kills - p.total_deaths) * 0.8) +
-      (kd * 8) +
-      (hs * 2.5) +
-      (acc * 2) +
-      (p.total_damage / 1000);
+      ((p.total_kills - p.total_deaths) * 1) +
+      (kd * 6) +
+      (hs * 2) +
+      (accSafe * 0.5) +
+      (dmg / 1200);
 
     return { ...p, score: score * activity };
   });
@@ -297,7 +370,7 @@ app.get("/", async (req, res) => {
     html+=`
     <tr>
       <td>${i+1}</td>
-      <td>${escapeHTML(p.nick)}</td>
+      <td>${escapeHTML(p.nick || "")}</td>
       <td>${p.total_kills}</td>
       <td>${p.total_deaths}</td>
       <td>${p.kd.toFixed(2)}</td>
@@ -319,5 +392,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   await initDB();
   await fetchAndSave();
-  setInterval(fetchAndSave, 60000);
+  setInterval(fetchAndSave, 180000);
 });
