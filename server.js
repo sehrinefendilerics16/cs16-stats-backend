@@ -14,7 +14,19 @@ const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173
 let cache = {};
 const CACHE_LIMIT = 50;
 
-// ================= 1. VERİTABANI BAŞLATMA (ARŞİV ODAKLI) =================
+// ================= 1. RAM KORUMASI (EKLENDİ) =================
+function cleanCache() {
+  const now = Date.now();
+  for (const key in cache) {
+    if (now - cache[key].time > 30000) delete cache[key];
+  }
+  const keys = Object.keys(cache);
+  if (keys.length > CACHE_LIMIT) {
+    cache = {}; // Aşırı yüklenmede hafızayı sıfırla
+  }
+}
+
+// ================= 2. VERİTABANI BAŞLATMA =================
 async function initDB() {
   const client = await pool.connect();
   try {
@@ -33,6 +45,7 @@ async function initDB() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_nick_lower ON players (LOWER(nick));
+      CREATE INDEX IF NOT EXISTS idx_ranking_speed ON players (total_kills, total_damage);
       
       CREATE TABLE IF NOT EXISTS system_log (
         id SERIAL PRIMARY KEY,
@@ -47,19 +60,19 @@ async function initDB() {
   }
 }
 
-// ================= 2. MOTOR (HİÇBİR VERİYİ SİLMEYEN YAPI) =================
+// ================= 3. MOTOR VE SCRAPER =================
 let isRunning = false;
-async function fetchAndSave() {
-  if (isRunning) return;
-  isRunning = true;
-  const client = await pool.connect();
-  
+
+async function fetchPlayers(retry = 2) {
   try {
     const { data } = await axios.get(BASE_URL, { timeout: 8000 });
     const $ = cheerio.load(data);
     const players = [];
     
-    $("table.CSS_Table_Example tr").each((i, row) => {
+    // YEDEK PLAN EKLENDİ: Sınıf adı değişirse bile veriyi bul
+    const rows = $("table.CSS_Table_Example tr").length ? $("table.CSS_Table_Example tr") : $("table tr");
+
+    rows.each((i, row) => {
       if (i === 0) return;
       const cols = $(row).find("td");
       if (cols.length !== 8) return;
@@ -76,8 +89,26 @@ async function fetchAndSave() {
         damage: parseInt($(cols[7]).text()) || 0
       });
     });
+    return players;
+  } catch (err) {
+    if (retry > 0) return fetchPlayers(retry - 1);
+    throw err;
+  }
+}
 
-    const newHash = crypto.createHash("md5").update(JSON.stringify(players)).digest("hex");
+async function fetchAndSave() {
+  if (isRunning) return;
+  isRunning = true;
+  const client = await pool.connect();
+  
+  try {
+    const players = await fetchPlayers();
+    if (!players || players.length < 5) throw new Error("Yetersiz Veri");
+
+    // HASH KORUMASI EKLENDİ: Sadece satır yeri değişti diye güncelleme yapmaz
+    const sortedPlayers = [...players].sort((a, b) => a.nick.localeCompare(b.nick));
+    const newHash = crypto.createHash("md5").update(JSON.stringify(sortedPlayers)).digest("hex");
+    
     const lastHashRes = await client.query(`SELECT id, last_hash FROM system_log ORDER BY id DESC LIMIT 1`);
     
     if (lastHashRes.rows[0]?.last_hash === newHash) {
@@ -104,14 +135,14 @@ async function fetchAndSave() {
     console.log("✅ Veri Tabanı Başarıyla Güncellendi.");
   } catch (err) {
     if (client) await client.query('ROLLBACK');
-    console.error("❌ Motor Hatası:", err.stack);
+    console.error("❌ Motor Hatası:", err.message);
   } finally {
     client.release();
     isRunning = false;
   }
 }
 
-// ================= 3. ARAYÜZ (GÜNCEL TASARIM) =================
+// ================= 4. ARAYÜZ (SENİN TASARIMIN, HİÇ DOKUNULMADI) =================
 app.get("/", async (req, res) => {
   const search = (req.query.search || "").toLowerCase();
   const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -222,11 +253,12 @@ app.get("/force-update", async (req, res) => {
   res.send("✅ Güncelleme Başarılı.");
 });
 
-// ================= 4. STARTUP =================
+// ================= 5. STARTUP =================
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
   app.listen(PORT, () => {
     fetchAndSave();
     setInterval(fetchAndSave, 180000); // 3 dk
+    setInterval(cleanCache, 60000); // RAM temizliğini tetikle
   });
 });
