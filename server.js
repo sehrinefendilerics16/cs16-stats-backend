@@ -251,7 +251,7 @@ app.get("/", async (req, res) => {
         </div>
 
         <div class="update-badge">
-          🔄 Liste en son <b>${lastUpdateDate}</b> tarihinde güncellendi
+          Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.
         </div>
         
         ${top3.length ? `<div class="top">
