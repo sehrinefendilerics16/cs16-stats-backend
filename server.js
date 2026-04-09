@@ -115,9 +115,9 @@ async function fetchAndSave() {
     
     const lastHashRes = await client.query(`SELECT id, last_hash FROM system_log ORDER BY id DESC LIMIT 1`);
     
+    // 🔥 DEĞİŞİKLİK BURADA: Veri aynıysa saati ASLA güncelleme, sadece işlemi durdur!
     if (lastHashRes.rows[0]?.last_hash === newHash) {
-        await client.query(`UPDATE system_log SET last_fetch = CURRENT_TIMESTAMP WHERE id = $1`, [lastHashRes.rows[0].id]);
-        return;
+        return; 
     }
 
     await client.query('BEGIN');
@@ -136,7 +136,7 @@ async function fetchAndSave() {
     await client.query(`INSERT INTO system_log (last_fetch, last_hash) VALUES (CURRENT_TIMESTAMP, $1)`, [newHash]);
     await client.query('COMMIT');
     cache = {}; 
-    console.log("✅ Veri Tabanı Başarıyla Güncellendi.");
+    console.log("✅ Yeni Veri Geldi ve Sistem Saati Güncellendi.");
   } catch (err) {
     if (client) await client.query('ROLLBACK');
     console.error("❌ Motor Hatası:", err.message);
