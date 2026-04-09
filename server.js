@@ -10,11 +10,14 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// 🔥 KRİTİK EKLENTİ: Sunucunu botlardan ve çökertmelerden koruyacak şifre.
+const ADMIN_KEY = "efendi2026"; 
+
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 let cache = {};
 const CACHE_LIMIT = 50;
 
-// ================= 1. RAM KORUMASI (EKLENDİ) =================
+// ================= 1. RAM KORUMASI =================
 function cleanCache() {
   const now = Date.now();
   for (const key in cache) {
@@ -69,7 +72,7 @@ async function fetchPlayers(retry = 2) {
     const $ = cheerio.load(data);
     const players = [];
     
-    // YEDEK PLAN EKLENDİ: Sınıf adı değişirse bile veriyi bul
+    // 🔥 KRİTİK EKLENTİ: Scraper Yedeği (Oyunyöneticisi tablo adını değiştirirse siten çökmez)
     const rows = $("table.CSS_Table_Example tr").length ? $("table.CSS_Table_Example tr") : $("table tr");
 
     rows.each((i, row) => {
@@ -105,7 +108,7 @@ async function fetchAndSave() {
     const players = await fetchPlayers();
     if (!players || players.length < 5) throw new Error("Yetersiz Veri");
 
-    // HASH KORUMASI EKLENDİ: Sadece satır yeri değişti diye güncelleme yapmaz
+    // 🔥 KRİTİK EKLENTİ: Hash Öncesi Sıralama (Veritabanının boş yere şişmesini kesin olarak engeller)
     const sortedPlayers = [...players].sort((a, b) => a.nick.localeCompare(b.nick));
     const newHash = crypto.createHash("md5").update(JSON.stringify(sortedPlayers)).digest("hex");
     
@@ -142,7 +145,7 @@ async function fetchAndSave() {
   }
 }
 
-// ================= 4. ARAYÜZ (SENİN TASARIMIN, HİÇ DOKUNULMADI) =================
+// ================= 4. ARAYÜZ (TASARIM VE MANTIK KORUNDU) =================
 app.get("/", async (req, res) => {
   const search = (req.query.search || "").toLowerCase();
   const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -240,7 +243,9 @@ app.get("/", async (req, res) => {
   }
 });
 
+// 🔥 KRİTİK EKLENTİ: Admin Koruması. Botlar artık sistemi çökertecek istekler gönderemez.
 app.get("/status", async (req, res) => {
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi.");
   try {
     const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const formatted = r.rows[0]?.last_fetch ? new Date(r.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "Veri yok";
@@ -249,6 +254,7 @@ app.get("/status", async (req, res) => {
 });
 
 app.get("/force-update", async (req, res) => {
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi.");
   await fetchAndSave();
   res.send("✅ Güncelleme Başarılı.");
 });
