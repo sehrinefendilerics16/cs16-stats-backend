@@ -113,14 +113,13 @@ async function fetchAndSave() {
   if (isRunning) return;
   isRunning = true;
 
-  // 🔥 YENİLİK 1: Veritabanını yormamak için özel bağlantı açıyoruz
   const client = await pool.connect();
 
   try {
     const players = await fetchPlayers();
     if (!players || players.length < 5) {
       isRunning = false;
-      setTimeout(fetchAndSave, 180000); // Hata varsa 3 dk sonra tekrar dene
+      setTimeout(fetchAndSave, 180000); 
       return;
     }
 
@@ -132,14 +131,13 @@ async function fetchAndSave() {
       await client.query(`INSERT INTO system_log (last_fetch, last_hash) VALUES (CURRENT_TIMESTAMP, $1)`, [newHash]);
       await client.query(`DELETE FROM system_log WHERE last_fetch < NOW() - INTERVAL '7 days'`);
       isRunning = false;
-      setTimeout(fetchAndSave, 180000); // Veri aynıysa 3 dk bekle tekrar dene
+      setTimeout(fetchAndSave, 180000); 
       return;
     }
 
     const all = await client.query(`SELECT nick, last_kills, last_deaths, last_damage, hs_percent, accuracy FROM players`);
     const map = new Map(all.rows.map(p => [p.nick, p]));
 
-    // 🔥 YENİLİK 2: TRANSACTION BAŞLANGICI (Tüm oyuncuları tek pakette kaydeder, hızlandırır)
     await client.query('BEGIN');
 
     for (const p of players) {
@@ -165,7 +163,6 @@ async function fetchAndSave() {
         continue;
       }
 
-      // Delta Hesaplama (Asla Veri Kaybetmez)
       const isReset = p.kills < old.last_kills || p.deaths < old.last_deaths || p.damage < old.last_damage;
       const dk = isReset ? p.kills : p.kills - old.last_kills;
       const dd = isReset ? p.deaths : p.deaths - old.last_deaths;
@@ -185,28 +182,24 @@ async function fetchAndSave() {
     await client.query(`INSERT INTO system_log (last_fetch, last_hash) VALUES (CURRENT_TIMESTAMP, $1)`, [newHash]);
     await client.query(`DELETE FROM system_log WHERE last_fetch < NOW() - INTERVAL '7 days'`);
     
-    // İşlemleri Onayla ve Kaydet
     await client.query('COMMIT');
     cache = {}; 
 
   } catch (err) {
-    await client.query('ROLLBACK'); // Hata olursa sistemi geri al, veriyi koru
+    await client.query('ROLLBACK'); 
     console.error(err.message);
   } finally {
-    client.release(); // Bağlantıyı kapat
+    client.release(); 
     isRunning = false;
-    // 🔥 YENİLİK 3: ZİNCİRLEME DÖNGÜ (Üst üste binmeyi %100 engeller)
     setTimeout(fetchAndSave, 180000); 
   }
 }
 
 // ================= 6. YÖNETİM ROTALARI =================
 
-// 🔥 YENİLİK 4: UptimeRobot/Cron-job için Veritabanı Kalkanı
 let statusCache = { data: "", time: 0 };
 
 app.get("/status", async (req, res) => {
-  // Botlar 5 dakikada bir gelse de, 60 saniyelik bu kalkan sayesinde DB yorulmaz
   if (Date.now() - statusCache.time < 60000) {
     return res.send(statusCache.data);
   }
@@ -286,27 +279,34 @@ app.get("/", async (req, res) => {
   .s{background:linear-gradient(135deg, #cbd5f5, #94a3b8);color:black}
   .b{background:linear-gradient(135deg, #fb923c, #c2410c);color:black}
   .search{text-align:center;margin:15px}
-  input{padding:12px;border-radius:8px;border:none;width:250px;outline:none;}
+  input{padding:12px;border-radius:8px;border:none;width:250px;outline:none;background:#1e293b;color:white;border:1px solid #334155;}
   button{padding:12px 20px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer;font-weight:bold;color:white;transition:0.3s;}
   button:hover{background:#0284c7;}
-  .info{text-align:center;color:#94a3b8;margin-top:10px;font-size:14px;}
-  .ig-link{text-align:center;margin-top:20px;margin-bottom:15px;}
-  .ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;font-size:16px;background:#020617;padding:12px 25px;border-radius:8px;display:inline-block;border: 1px solid #e1306c; transition:0.3s;}
+  
+  /* SADELEŞTİRİLMİŞ YENİ BİLGİ KUTUSU */
+  .info-box {text-align:center; background:#1e293b; border: 1px solid #334155; padding: 12px 20px; margin: 15px auto; max-width: 600px; border-radius: 8px; color: #cbd5e1; font-size: 14px;}
+  
+  .ig-link{text-align:center;margin-top:20px;margin-bottom:10px;}
+  .ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;font-size:15px;background:#020617;padding:10px 20px;border-radius:8px;display:inline-block;border: 1px solid #e1306c; transition:0.3s;}
   .ig-link a:hover{background:#e1306c;color:white;}
+  
   table{width:95%;max-width:1200px;margin:20px auto;border-collapse:collapse;box-shadow: 0 0 20px rgba(0,0,0,0.5);}
-  th{background:#1e293b;padding:12px;font-weight:bold;letter-spacing:1px;}
-  td{padding:10px;text-align:center;border-bottom:1px solid #334155;}
+  th{background:#1e293b;padding:12px;font-weight:bold;letter-spacing:1px;font-size:14px;}
+  td{padding:10px;text-align:center;border-bottom:1px solid #334155;font-size:14px;}
   tr:hover td{background:#1e293b;}
   </style>
   </head>
   <body>
   <h1>SEHRIN EFENDILERI (95.173.173.81)</h1>
+  
   <div class="ig-link">
     <a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram'da Bizi Takip Edin: @sehrinefendilerics16</a>
   </div>
-  <div class="info">
-    ⚠️ Sıralama verileri sürekli ve birikimli olarak hesaplanmaktadır. Sıfırlanmaz!
+  
+  <div class="info-box">
+    ⚠️ Tüm veriler 30.03.2026 tarihinden itibaren kaydedilmektedir.
   </div>
+
   <div class="top">
     <div class="box g">🥇 ${top3[0] ? escapeHTML(top3[0].nick) : "Bekleniyor"}</div>
     <div class="box s">🥈 ${top3[1] ? escapeHTML(top3[1].nick) : "Bekleniyor"}</div>
@@ -343,8 +343,8 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
   await initDB();       
-  await fetchAndSave(); // İlk açılışı yapar ve zincirleme (setTimeout) döngüsünü başlatır.
+  await fetchAndSave(); 
   
-  setInterval(cleanCache, 60000); // Sadece RAM temizliğini bağımsız olarak dakikada bir yapar.
+  setInterval(cleanCache, 60000); 
   console.log(`Sunucu ${PORT} portunda başarıyla çalışıyor. Sistem aktif!`);
 });
