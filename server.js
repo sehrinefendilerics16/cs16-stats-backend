@@ -244,24 +244,11 @@ app.get("/status", async (req, res) => {
 
     const formatted = last
       ? new Date(last).toLocaleString("tr-TR", {
-          timeZone: "Europe/Istanbul",
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit"
+          timeZone: "Europe/Istanbul"
         })
       : "Veri yok";
 
-    res.send(`
-    <html>
-    <body style="background:#0f172a;color:white;text-align:center;padding-top:80px;">
-      <h2>📊 Sistem Son Güncelleme</h2>
-      <h3>${formatted}</h3>
-    </body>
-    </html>
-    `);
+    res.send(`<h2>${formatted}</h2>`);
   } catch (err) {
     res.send("HATA: " + err.message);
   }
@@ -270,6 +257,61 @@ app.get("/status", async (req, res) => {
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
   res.send("OK");
+});
+
+// ================= PANEL =================
+app.get("/", async (req, res) => {
+
+  cleanCache();
+
+  const search = (req.query.search || "").toLowerCase();
+
+  if (cache[search] && Date.now() - cache[search].time < 30000) {
+    return res.send(cache[search].data);
+  }
+
+  const result = await pool.query(`
+    SELECT *,
+      (total_kills - total_deaths) AS puan,
+      (total_kills::float / GREATEST(total_deaths,1)) AS kd
+    FROM players
+    WHERE LOWER(nick) LIKE $1
+  `, [`%${search}%`]);
+
+  let players = result.rows;
+
+  players = players.map(p => {
+    const kd = p.kd || 0;
+    const hs = p.hs_percent || 0;
+    const acc = p.accuracy || 0;
+    const dmg = p.total_damage || 0;
+
+    const activity = Math.min(p.total_kills / 1000, 1);
+    const accSafe = Math.min(acc, 35);
+
+    const score =
+      ((p.total_kills - p.total_deaths)) +
+      (kd * 2.5) +
+      (hs * 1.5) +
+      (accSafe * 0.3) +
+      (dmg / 800);
+
+    return { ...p, score: score * (0.7 + activity * 0.3) };
+  });
+
+  players.sort((a,b)=> b.score - a.score);
+
+  let html = "<h1>SEHRIN EFENDILERI</h1><table border=1>";
+
+  players.forEach((p,i)=>{
+    html+=`<tr><td>${i+1}</td><td>${escapeHTML(p.nick)}</td><td>${Math.round(p.score)}</td></tr>`;
+  });
+
+  html+="</table>";
+
+  cache[search] = { data: html, time: Date.now() };
+
+  res.send(html);
 });
 
 // ================= START =================
