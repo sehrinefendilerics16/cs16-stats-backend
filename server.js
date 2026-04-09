@@ -38,8 +38,9 @@ function escapeHTML(str) {
   }[m]));
 }
 
-// ================= 3. VERİTABANI BAŞLATMA =================
+// ================= 3. VERİTABANI BAŞLATMA (GÜNCELLENDİ) =================
 async function initDB() {
+  // 1. Oyuncu tablosunu oluştur
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
       id SERIAL PRIMARY KEY,
@@ -55,7 +56,10 @@ async function initDB() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_nick ON players (LOWER(nick));`);
+  
+  // 2. Log tablosunu oluştur
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_log (
       id SERIAL PRIMARY KEY,
@@ -63,6 +67,14 @@ async function initDB() {
       last_hash TEXT
     );
   `);
+
+  // 🔥 KRİTİK TAMİR: Eksik olan last_hash kolonunu manuel olarak ekle
+  try {
+    await pool.query(`ALTER TABLE system_log ADD COLUMN IF NOT EXISTS last_hash TEXT;`);
+    console.log("Veritabanı yapısı kontrol edildi ve güncellendi.");
+  } catch (err) {
+    // Kolon zaten varsa veya başka bir durum varsa sessizce devam et
+  }
 }
 
 // ================= 4. SCRAPER =================
@@ -174,9 +186,8 @@ app.get("/force-update", async (req, res) => {
 app.get("/", async (req, res) => {
   const search = (req.query.search || "").toLowerCase();
   const page = parseInt(req.query.page) || 1;
-  const limit = 100; // Her sayfada 100 kişi
+  const limit = 100; 
   
-  // Cache key artık sayfa numarasını da içermeli
   const cacheKey = `${search}_p${page}`;
   if (cache[cacheKey] && Date.now() - cache[cacheKey].time < 30000) return res.send(cache[cacheKey].data);
 
@@ -192,7 +203,7 @@ app.get("/", async (req, res) => {
   const totalPages = Math.ceil(totalPlayers / limit);
   const offset = (page - 1) * limit;
   const players = allPlayers.slice(offset, offset + limit);
-  const top3 = allPlayers.slice(0, 3); // Top 3 her zaman en iyileri gösterir
+  const top3 = allPlayers.slice(0, 3);
 
   let html = `
   <html>
