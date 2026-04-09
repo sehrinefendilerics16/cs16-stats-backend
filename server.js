@@ -223,6 +223,22 @@ async function fetchAndSave() {
   }
 }
 
+// ================= ROUTES =================
+app.get("/status", async (req, res) => {
+  const result = await pool.query(`
+    SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1
+  `);
+
+  const last = result.rows[0]?.last_fetch;
+
+  res.send(`Son veri cekilme zamani: ${last || "Yok"}`);
+});
+
+app.get("/force-update", async (req, res) => {
+  await fetchAndSave();
+  res.send("OK");
+});
+
 // ================= PANEL =================
 app.get("/", async (req, res) => {
 
@@ -260,80 +276,18 @@ app.get("/", async (req, res) => {
       (accSafe * 0.3) +
       (dmg / 800);
 
-    // 🔥 SADECE BURASI DEĞİŞTİ
     return { ...p, score: score * (0.7 + activity * 0.3) };
   });
 
   players.sort((a,b)=> b.score - a.score);
 
-  const top3 = players.slice(0,3);
-
-  let html = `
-  <html>
-  <head>
-  <style>
-  body{background:#0f172a;color:white;font-family:Arial;margin:0}
-  h1{text-align:center;padding:20px;background:#020617;margin:0}
-  .top{display:flex;justify-content:center;gap:20px;margin:20px}
-  .box{padding:15px 25px;border-radius:10px;font-weight:bold}
-  .g{background:#facc15;color:black}
-  .s{background:#cbd5f5;color:black}
-  .b{background:#fb923c;color:black}
-  .search{text-align:center;margin:15px}
-  input{padding:10px;border-radius:8px;border:none}
-  button{padding:10px;border-radius:8px;border:none;background:#38bdf8}
-  .info{text-align:center;color:#94a3b8;margin-top:10px}
-  table{width:95%;margin:auto;border-collapse:collapse}
-  th{background:#1e293b;padding:10px}
-  td{padding:8px;text-align:center;border-bottom:1px solid #334155}
-  </style>
-  </head>
-
-  <body>
-
-  <h1>SEHRIN EFENDILERI</h1>
-
-  <div class="info">
-    ⚠️ Sıralama verileri 30.03.2026 tarihinden itibaren hesaplanmaktadır.
-  </div>
-
-  <div class="top">
-    <div class="box g">🥇 ${top3[0]?.nick||""}</div>
-    <div class="box s">🥈 ${top3[1]?.nick||""}</div>
-    <div class="box b">🥉 ${top3[2]?.nick||""}</div>
-  </div>
-
-  <form class="search">
-    <input name="search" placeholder="Oyuncu ara..." value="${search}">
-    <button type="submit">Ara</button>
-  </form>
-
-  <table>
-  <tr>
-    <th>#</th>
-    <th>Oyuncu</th>
-    <th>Öldürme</th>
-    <th>Ölüm</th>
-    <th>K/D</th>
-    <th>Hasar</th>
-    <th>SKOR</th>
-  </tr>
-  `;
+  let html = "<h1>SEHRIN EFENDILERI</h1><table border='1'><tr><th>#</th><th>Oyuncu</th><th>Kill</th><th>Death</th><th>KD</th><th>Skor</th></tr>";
 
   players.forEach((p,i)=>{
-    html+=`
-    <tr>
-      <td>${i+1}</td>
-      <td>${escapeHTML(p.nick || "")}</td>
-      <td>${p.total_kills}</td>
-      <td>${p.total_deaths}</td>
-      <td>${p.kd.toFixed(2)}</td>
-      <td>${p.total_damage}</td>
-      <td>${Math.round(p.score)}</td>
-    </tr>`;
+    html+=`<tr><td>${i+1}</td><td>${escapeHTML(p.nick)}</td><td>${p.total_kills}</td><td>${p.total_deaths}</td><td>${p.kd.toFixed(2)}</td><td>${Math.round(p.score)}</td></tr>`;
   });
 
-  html+=`</table></body></html>`;
+  html+="</table>";
 
   cache[search] = { data: html, time: Date.now() };
 
