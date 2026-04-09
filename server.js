@@ -173,7 +173,6 @@ app.get("/status", async (req, res) => {
 // ================= FORCE =================
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
-
   res.send(`
   <html>
   <body style="background:#0f172a;color:white;text-align:center;padding-top:100px;">
@@ -188,12 +187,15 @@ app.get("/", async (req, res) => {
 
   cleanCache();
 
+  const search = (req.query.search || "").toLowerCase();
+
   const result = await pool.query(`
     SELECT *,
     (total_kills - total_deaths) AS puan,
     (total_kills::float / GREATEST(total_deaths,1)) AS kd
     FROM players
-  `);
+    WHERE LOWER(nick) LIKE $1
+  `, [`%${search}%`]);
 
   let players = result.rows.map(p => {
     const score =
@@ -221,6 +223,9 @@ app.get("/", async (req, res) => {
   .g{background:#facc15;color:black}
   .s{background:#cbd5f5;color:black}
   .b{background:#fb923c;color:black}
+  .search{text-align:center;margin:20px}
+  .search input{padding:10px;border-radius:8px;border:none;width:250px}
+  .search button{padding:10px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer}
   table{width:95%;margin:auto;border-collapse:collapse}
   th{background:#1e293b;padding:10px}
   td{padding:8px;text-align:center;border-bottom:1px solid #334155}
@@ -236,6 +241,11 @@ app.get("/", async (req, res) => {
     <div class="box s">🥈 ${top3[1]?.nick||""}</div>
     <div class="box b">🥉 ${top3[2]?.nick||""}</div>
   </div>
+
+  <form class="search">
+    <input name="search" placeholder="Oyuncu ara..." value="${search}">
+    <button type="submit">Ara</button>
+  </form>
 
   <table>
   <tr>
