@@ -14,7 +14,6 @@ const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173
 let cache = {};
 const CACHE_LIMIT = 50;
 
-// 🔥 KRİTİK GÜVENLİK: Şifreyi koddan çıkardık. Render panelinden (Environment) çekecek.
 const ADMIN_KEY = process.env.ADMIN_KEY || "sehrinefendileri"; 
 
 // ================= 1. RAM KORUMASI =================
@@ -25,7 +24,7 @@ function cleanCache() {
   }
   const keys = Object.keys(cache);
   if (keys.length > CACHE_LIMIT) {
-    cache = {}; // Aşırı yüklenmede hafızayı sıfırla
+    cache = {}; 
   }
 }
 
@@ -55,7 +54,6 @@ async function initDB() {
         last_fetch TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_hash TEXT
       );
-      ALTER TABLE system_log ADD COLUMN IF NOT EXISTS last_hash TEXT;
     `);
     console.log("⚔️ Arşiv Sistemi: Emekler Kayıt Altında.");
   } finally {
@@ -142,7 +140,7 @@ async function fetchAndSave() {
   }
 }
 
-// ================= 4. ARAYÜZ (TASARIM VE MANTIK KORUNDU) =================
+// ================= 4. ARAYÜZ (TASARIM VE GÜNCELLEMELER) =================
 app.get("/", async (req, res) => {
   const search = (req.query.search || "").toLowerCase();
   const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -169,27 +167,34 @@ app.get("/", async (req, res) => {
     `;
     
     const countRes = await pool.query(`SELECT COUNT(*) FROM players WHERE LOWER(nick) LIKE $1`, [`%${search}%`]);
+    const logRes = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const result = await pool.query(query, [`%${search}%`, limit, offset]);
 
     const totalPages = Math.ceil(parseInt(countRes.rows[0].count) / limit);
     const players = result.rows;
     const top3 = (page === 1 && !search) ? players.slice(0, 3) : [];
+    const lastUpdateDate = logRes.rows[0]?.last_fetch ? new Date(logRes.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "Henüz veri yok";
 
     const escapeHTML = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
     
-    let html = `<html><head><meta charset="UTF-8"><title>SEHRIN EFENDILERI</title><style>
-      body{background:#0f172a;color:white;font-family:'Segoe UI',sans-serif;margin:0;padding-bottom:50px;overflow-x:hidden;}
-      .header-container{text-align:center;padding:40px 10px;background:#020617;width:100%;}
+    let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SEHRIN EFENDILERI</title><style>
+      body{
+        background: linear-gradient(rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.75)), 
+                    url('https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg') no-repeat center center fixed;
+        background-size: cover;
+        color:white;font-family:'Segoe UI',sans-serif;margin:0;padding-bottom:50px;overflow-x:hidden;
+      }
+      .header-container{text-align:center;padding:40px 10px;background:rgba(2, 6, 23, 0.85);width:100%;}
       .main-title{font-size:clamp(24px,5vw,42px);font-weight:900;letter-spacing:3px;margin:0;text-shadow:0 0 15px rgba(56,189,248,0.5);}
       .ip-title{color:#38bdf8;font-size:clamp(18px,3vw,26px);margin:10px 0;font-weight:600;}
       .content-wrapper{width:95%;max-width:1400px;margin:0 auto;}
       .top{display:flex;justify-content:center;gap:20px;margin:30px 0;flex-wrap:wrap;}
-      .box{padding:15px 30px;border-radius:12px;font-weight:bold;min-width:200px;text-align:center;box-shadow:0 10px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);}
+      .box{padding:15px 30px;border-radius:12px;font-weight:bold;min-width:200px;text-align:center;box-shadow:0 10px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);backdrop-filter: blur(5px);}
       .g{background:linear-gradient(135deg,#facc15,#ca8a04);color:#000}.s{background:linear-gradient(135deg,#e2e8f0,#94a3b8);color:#000}.b{background:linear-gradient(135deg,#fb923c,#c2410c);color:#000}
       
       .info-box{
         text-align:center;
-        background: rgba(15, 23, 42, 0.8);
+        background: rgba(15, 23, 42, 0.85);
         border: 1px solid rgba(56, 189, 248, 0.3);
         padding: 20px;
         margin: 20px auto;
@@ -202,21 +207,38 @@ app.get("/", async (req, res) => {
       }
       .info-box span { color: #facc15; font-weight: bold; text-shadow: 0 0 8px rgba(250, 204, 21, 0.5); }
       
+      .update-badge {
+        text-align: center;
+        margin: -10px auto 25px;
+        font-size: 14px;
+        color: #94a3b8;
+        background: rgba(30, 41, 59, 0.6);
+        display: table;
+        padding: 6px 18px;
+        border-radius: 20px;
+        border: 1px solid rgba(56, 189, 248, 0.25);
+        backdrop-filter: blur(5px);
+      }
+      .update-badge b { color: #38bdf8; font-weight: 700; }
+
       .search{text-align:center;margin:30px 0}
       input{padding:14px 20px;border-radius:8px;border:1px solid #334155;width:clamp(200px,50%,400px);background:#1e293b;color:white;font-size:16px;outline:none;}
       button,.nav-btn{padding:14px 30px;border-radius:8px;background:#38bdf8;color:white;font-weight:bold;text-decoration:none;cursor:pointer;transition:0.3s;border:none;font-size:16px;display:inline-block;}
       button:hover,.nav-btn:hover{background:#0284c7;transform:translateY(-2px);}
-      .ig-link{text-align:center;margin:20px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:#020617;padding:12px 30px;border-radius:8px;display:inline-block;border:1px solid #e1306c;transition:0.3s;}
+      .ig-link{text-align:center;margin:20px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:12px 30px;border-radius:8px;display:inline-block;border:1px solid #e1306c;transition:0.3s;}
       .ig-link a:hover{background:#e1306c;color:white;}
-      .table-container{width:100%;overflow-x:auto;background:#0f172a;border-radius:12px;box-shadow:0 0 30px rgba(0,0,0,0.5);}
+      .table-container{width:100%;overflow-x:auto;background:rgba(15, 23, 42, 0.85);border-radius:12px;box-shadow:0 0 30px rgba(0,0,0,0.5);backdrop-filter: blur(10px);}
       table{width:100%;border-collapse:collapse;min-width:900px;}
-      th{background:#1e293b;padding:20px;color:#94a3b8;text-transform:uppercase;font-size:14px;}
+      th{background:rgba(30, 41, 59, 0.9);padding:20px;color:#94a3b8;text-transform:uppercase;font-size:14px;}
       td{padding:18px;text-align:center;border-bottom:1px solid #1e293b;font-size:16px;position:relative;transition:0.2s;}
       .player-nick{color:#38bdf8;font-weight:600;}
       tr:hover td{background:rgba(56,189,248,0.12);}
       tr:hover .player-nick{color:#fff;}
       tr:hover td:first-child::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:#38bdf8;}
       .pagination{display:flex;justify-content:center;align-items:center;gap:20px;margin:30px 0;}
+
+      .kd-high { color: #00ff00 !important; font-weight: bold; } 
+      .kd-low { color: #ff4500 !important; }
     </style></head><body>
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
       <div class="content-wrapper">
@@ -224,6 +246,10 @@ app.get("/", async (req, res) => {
         
         <div class="info-box">
           ⚠️ Veriler yalnızca <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir. Bu tarihten önceki istatistikler hesaplamaya dahil edilmez.
+        </div>
+
+        <div class="update-badge">
+          📡 Son Veri Senkronizasyonu: <b>${lastUpdateDate}</b>
         </div>
         
         ${top3.length ? `<div class="top">
@@ -234,15 +260,22 @@ app.get("/", async (req, res) => {
         <form class="search"><input name="search" placeholder="Oyuncu ara..." value="${escapeHTML(search)}"><button type="submit">Ara</button></form>
         <div class="table-container"><table>
           <tr><th>SIRA</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr>
-          ${players.map((p, i) => `<tr>
-            <td><b>${offset + i + 1}</b></td>
-            <td class="player-nick">${escapeHTML(p.nick)}</td>
-            <td>${p.total_kills}</td>
-            <td>${p.total_deaths}</td>
-            <td>${(p.total_kills / Math.max(p.total_deaths, 1)).toFixed(2)}</td>
-            <td>${p.total_damage}</td>
-            <td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td>
-          </tr>`).join('')}
+          ${players.map((p, i) => {
+            const kd = (p.total_kills / Math.max(p.total_deaths, 1));
+            let kdClass = "";
+            if(kd >= 2.0) kdClass = "kd-high";
+            else if(kd < 1.0) kdClass = "kd-low";
+
+            return `<tr>
+              <td><b>${offset + i + 1}</b></td>
+              <td class="player-nick">${escapeHTML(p.nick)}</td>
+              <td>${p.total_kills}</td>
+              <td>${p.total_deaths}</td>
+              <td class="${kdClass}">${kd.toFixed(2)}</td>
+              <td>${p.total_damage}</td>
+              <td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td>
+            </tr>`;
+          }).join('')}
         </table></div>
         <div class="pagination">
           <a href="/?page=${page - 1}&search=${search}" class="nav-btn ${page <= 1 ? 'disabled' : ''}">← Geri</a>
