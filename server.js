@@ -197,7 +197,6 @@ app.get("/", async (req, res) => {
       }
       .ip-title { color: #38bdf8; font-size: clamp(18px, 3vw, 26px); margin-top: 10px; font-weight: 600; }
 
-      /* İÇERİK GENİŞLETME */
       .content-wrapper { width: 95%; max-width: 1400px; margin: 0 auto; }
 
       .top{display:flex;justify-content:center;gap:20px;margin:30px 0;flex-wrap:wrap;}
@@ -217,13 +216,17 @@ app.get("/", async (req, res) => {
       .ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:#020617;padding:12px 30px;border-radius:8px;display:inline-block;border: 1px solid #e1306c; transition:0.3s;}
       .ig-link a:hover{background:#e1306c;color:white;}
 
-      /* TABLO GENİŞLETME */
       .table-container { width: 100%; overflow-x: auto; background: #0f172a; border-radius:12px; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
       table{width: 100%; border-collapse:collapse; min-width: 900px;}
       th{background:#1e293b;padding:20px 10px;text-align:center;font-size:14px;text-transform:uppercase;color:#94a3b8; letter-spacing: 1px;}
       td{padding:18px 10px;text-align:center;border-bottom:1px solid #1e293b;font-size:16px;position:relative;transition:0.2s;}
       
-      tr:hover td { background: rgba(56, 189, 248, 0.12); color: #38bdf8; }
+      /* NİCK RENGİ GÜNCELLEMESİ */
+      .player-nick { color: #38bdf8; font-weight: 600; }
+
+      tr:hover td { background: rgba(56, 189, 248, 0.12); }
+      tr:hover .player-nick { color: #fff; } /* Üzerine gelince nick beyaza dönsün ki parlasın */
+      
       tr:hover td:first-child::before {
         content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #38bdf8;
       }
@@ -263,7 +266,7 @@ app.get("/", async (req, res) => {
               ${players.map((p,i)=>`
                 <tr>
                   <td><b>${i+1}</b></td>
-                  <td>${escapeHTML(p.nick)}</td>
+                  <td class="player-nick">${escapeHTML(p.nick)}</td>
                   <td>${p.total_kills}</td>
                   <td>${p.total_deaths}</td>
                   <td>${p.kd.toFixed(2)}</td>
