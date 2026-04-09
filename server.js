@@ -41,7 +41,7 @@ async function initDB() {
       );
       ALTER TABLE system_log ADD COLUMN IF NOT EXISTS last_hash TEXT;
     `);
-    console.log("⚔️ SEHRIN EFENDILERI: Arşiv Sistemi ve Tasarım Hazır.");
+    console.log("⚔️ Arşiv Sistemi: Emekler Kayıt Altında.");
   } finally {
     client.release();
   }
@@ -101,17 +101,17 @@ async function fetchAndSave() {
     await client.query(`INSERT INTO system_log (last_fetch, last_hash) VALUES (CURRENT_TIMESTAMP, $1)`, [newHash]);
     await client.query('COMMIT');
     cache = {}; 
-    console.log("✅ Veriler Arşive İşlendi.");
+    console.log("✅ Veri Tabanı Başarıyla Güncellendi.");
   } catch (err) {
     if (client) await client.query('ROLLBACK');
-    console.error("❌ Hata:", err.stack);
+    console.error("❌ Motor Hatası:", err.stack);
   } finally {
     client.release();
     isRunning = false;
   }
 }
 
-// ================= 3. ARAYÜZ (GELİŞMİŞ TASARIM) =================
+// ================= 3. ARAYÜZ (GÜNCEL TASARIM) =================
 app.get("/", async (req, res) => {
   const search = (req.query.search || "").toLowerCase();
   const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -150,7 +150,7 @@ app.get("/", async (req, res) => {
       body{background:#0f172a;color:white;font-family:'Segoe UI',sans-serif;margin:0;padding-bottom:50px;overflow-x:hidden;}
       .header-container{text-align:center;padding:40px 10px;background:#020617;width:100%;}
       .main-title{font-size:clamp(24px,5vw,42px);font-weight:900;letter-spacing:3px;margin:0;text-shadow:0 0 15px rgba(56,189,248,0.5);}
-      .ip-title{color:#38bdf8;font-size:clamp(18px,3vw,26px);margin-top:10px;font-weight:600;}
+      .ip-title{color:#38bdf8;font-size:clamp(18px,3vw,26px);margin:10px 0;font-weight:600;}
       .content-wrapper{width:95%;max-width:1400px;margin:0 auto;}
       .top{display:flex;justify-content:center;gap:20px;margin:30px 0;flex-wrap:wrap;}
       .box{padding:15px 30px;border-radius:12px;font-weight:bold;min-width:200px;text-align:center;box-shadow:0 10px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);}
@@ -175,7 +175,7 @@ app.get("/", async (req, res) => {
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
       <div class="content-wrapper">
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
-        <div class="info-box">⚠️ Tüm veriler 30.03.2026 tarihinden itibaren kalıcı olarak arşivlenmektedir. Emekler silinmez.</div>
+        <div class="info-box">⚠️ Veriler yalnızca 30.03.2026 tarihinden itibaren kaydedilmektedir. Bu tarihten önceki istatistikler hesaplamaya dahil edilmez.</div>
         ${top3.length ? `<div class="top">
           <div class="box g">🥇 ${escapeHTML(top3[0].nick)}</div>
           <div class="box s">🥈 ${top3[1] ? escapeHTML(top3[1].nick) : "---"}</div>
@@ -209,7 +209,6 @@ app.get("/", async (req, res) => {
   }
 });
 
-// Admin Status
 app.get("/status", async (req, res) => {
   try {
     const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
@@ -220,7 +219,7 @@ app.get("/status", async (req, res) => {
 
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
-  res.send("✅ Manuel Güncelleme Başarılı.");
+  res.send("✅ Güncelleme Başarılı.");
 });
 
 // ================= 4. STARTUP =================
