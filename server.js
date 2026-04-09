@@ -17,18 +17,11 @@ let isRunning = false;
 let cache = {};
 const CACHE_LIMIT = 50;
 
-// ================= CACHE CLEAN =================
+// ================= CACHE =================
 function cleanCache() {
   const now = Date.now();
-
   for (const key in cache) {
     if (now - cache[key].time > 30000) delete cache[key];
-  }
-
-  const keys = Object.keys(cache);
-  if (keys.length > CACHE_LIMIT) {
-    const sorted = keys.sort((a, b) => cache[a].time - cache[b].time);
-    sorted.slice(0, keys.length - CACHE_LIMIT).forEach(k => delete cache[k]);
   }
 }
 
@@ -138,7 +131,7 @@ async function fetchAndSave() {
       `, [p.nick, p.kills, p.deaths, p.damage, p.hsPercent, p.accuracy]);
     }
 
-    await pool.query(`INSERT INTO system_log (last_hash) VALUES ($1)`, [newHash]);
+    await pool.query(`INSERT INTO system_log (last_fetch,last_hash) VALUES (CURRENT_TIMESTAMP,$1)`, [newHash]);
     cache = {};
 
   } catch (err) {
@@ -167,7 +160,27 @@ app.get("/status", async (req, res) => {
     ? new Date(t).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })
     : "Veri yok";
 
-  res.send(`<h2 style="text-align:center">${formatted}</h2>`);
+  res.send(`
+  <html>
+  <body style="background:#0f172a;color:white;font-family:Arial;text-align:center;padding-top:100px;">
+    <h2>📊 Son Güncelleme</h2>
+    <h1>${formatted}</h1>
+  </body>
+  </html>
+  `);
+});
+
+// ================= FORCE =================
+app.get("/force-update", async (req, res) => {
+  await fetchAndSave();
+
+  res.send(`
+  <html>
+  <body style="background:#0f172a;color:white;text-align:center;padding-top:100px;">
+    <h2>✅ Veri Güncellendi</h2>
+  </body>
+  </html>
+  `);
 });
 
 // ================= PANEL =================
@@ -195,39 +208,62 @@ app.get("/", async (req, res) => {
 
   players.sort((a,b)=> b.score - a.score);
 
+  const top3 = players.slice(0,3);
+
   let html = `
   <html>
   <head>
   <style>
-  body{background:#0f172a;color:white;font-family:Arial}
-  table{width:90%;margin:auto;border-collapse:collapse}
-  th,td{padding:10px;text-align:center;border-bottom:1px solid #334155}
-  th{background:#1e293b}
-  h1{text-align:center}
+  body{background:#0f172a;color:white;font-family:Arial;margin:0}
+  h1{text-align:center;padding:20px;background:#020617;margin:0}
+  .top{display:flex;justify-content:center;gap:20px;margin:20px}
+  .box{padding:15px 25px;border-radius:10px;font-weight:bold}
+  .g{background:#facc15;color:black}
+  .s{background:#cbd5f5;color:black}
+  .b{background:#fb923c;color:black}
+  table{width:95%;margin:auto;border-collapse:collapse}
+  th{background:#1e293b;padding:10px}
+  td{padding:8px;text-align:center;border-bottom:1px solid #334155}
   </style>
   </head>
+
   <body>
+
   <h1>SEHRIN EFENDILERI</h1>
+
+  <div class="top">
+    <div class="box g">🥇 ${top3[0]?.nick||""}</div>
+    <div class="box s">🥈 ${top3[1]?.nick||""}</div>
+    <div class="box b">🥉 ${top3[2]?.nick||""}</div>
+  </div>
+
   <table>
   <tr>
-  <th>#</th><th>Oyuncu</th><th>K</th><th>D</th><th>KD</th><th>DMG</th><th>Skor</th>
+    <th>#</th>
+    <th>Oyuncu</th>
+    <th>K</th>
+    <th>D</th>
+    <th>KD</th>
+    <th>DMG</th>
+    <th>SKOR</th>
   </tr>
   `;
 
   players.forEach((p,i)=>{
     html+=`
     <tr>
-    <td>${i+1}</td>
-    <td>${escapeHTML(p.nick)}</td>
-    <td>${p.total_kills}</td>
-    <td>${p.total_deaths}</td>
-    <td>${p.kd.toFixed(2)}</td>
-    <td>${p.total_damage}</td>
-    <td>${Math.round(p.score)}</td>
+      <td>${i+1}</td>
+      <td>${escapeHTML(p.nick)}</td>
+      <td>${p.total_kills}</td>
+      <td>${p.total_deaths}</td>
+      <td>${p.kd.toFixed(2)}</td>
+      <td>${p.total_damage}</td>
+      <td>${Math.round(p.score)}</td>
     </tr>`;
   });
 
   html+=`</table></body></html>`;
+
   res.send(html);
 });
 
