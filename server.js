@@ -244,20 +244,45 @@ app.get("/", async (req, res) => {
   }
 });
 
-// ================= 5. GÜVENLİ YÖNETİM =================
+// ================= 5. GÜVENLİ YÖNETİM (ŞIK TASARIM) =================
 app.get("/status", async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi.");
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send(`<html><body style="background:#0f172a;color:#ef4444;font-family:'Segoe UI',sans-serif;text-align:center;padding-top:150px;"><h2>⛔ Erişim Reddedildi</h2><p>Bu alana giriş yetkiniz bulunmamaktadır.</p></body></html>`);
+  
   try {
     const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const formatted = r.rows[0]?.last_fetch ? new Date(r.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "Veri yok";
-    res.send(`Son Senkronizasyon: ${formatted}`);
-  } catch (e) { res.send("Hata..."); }
+    
+    res.send(`
+      <html>
+        <body style="background:#0f172a;color:white;font-family:'Segoe UI',sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;">
+          <div style="background:#1e293b;border:1px solid #334155;padding:40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);text-align:center;">
+            <h2 style="color:#38bdf8;margin-top:0;letter-spacing:1px;">📊 Arşiv Kayıt Durumu</h2>
+            <p style="font-size:18px;color:#cbd5e1;margin-bottom:0;">Son Senkronizasyon</p>
+            <h1 style="color:#facc15;margin-top:10px;font-size:32px;">${formatted}</h1>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (e) { 
+    res.send(`<html><body style="background:#0f172a;color:#ef4444;font-family:'Segoe UI',sans-serif;text-align:center;padding-top:150px;"><h2>❌ Sistem Hatası</h2></body></html>`); 
+  }
 });
 
 app.get("/force-update", async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi.");
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send(`<html><body style="background:#0f172a;color:#ef4444;font-family:'Segoe UI',sans-serif;text-align:center;padding-top:150px;"><h2>⛔ Erişim Reddedildi</h2><p>Bu alana giriş yetkiniz bulunmamaktadır.</p></body></html>`);
+  
   await fetchAndSave();
-  res.send("✅ Güncelleme Başarılı.");
+  
+  res.send(`
+    <html>
+      <body style="background:#0f172a;color:white;font-family:'Segoe UI',sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;">
+        <div style="background:#1e293b;border:1px solid #334155;padding:40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);text-align:center;">
+          <h2 style="color:#10b981;margin-top:0;letter-spacing:1px;">⚙️ Sisteme Müdahale Edildi</h2>
+          <p style="font-size:20px;color:#cbd5e1;margin-bottom:0;">Veritabanı Arşivi Başarıyla Güncellendi.</p>
+        </div>
+      </body>
+    </html>
+  `);
 });
 
 // ================= 6. STARTUP =================
