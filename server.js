@@ -190,7 +190,23 @@ app.get("/", async (req, res) => {
       .top{display:flex;justify-content:center;gap:20px;margin:30px 0;flex-wrap:wrap;}
       .box{padding:15px 30px;border-radius:12px;font-weight:bold;min-width:200px;text-align:center;box-shadow:0 10px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);}
       .g{background:linear-gradient(135deg,#facc15,#ca8a04);color:#000}.s{background:linear-gradient(135deg,#e2e8f0,#94a3b8);color:#000}.b{background:linear-gradient(135deg,#fb923c,#c2410c);color:#000}
-      .info-box{text-align:center;background:#1e293b;border:1px solid #334155;padding:15px;margin:20px auto;max-width:800px;border-radius:8px;color:#cbd5e1;font-size:15px;}
+      
+      /* YENİ TASARIM: Şık, neon uyarı kutusu */
+      .info-box{
+        text-align:center;
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        padding: 20px;
+        margin: 20px auto;
+        max-width: 800px;
+        border-radius: 12px;
+        color: #e2e8f0;
+        font-size: 16px;
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
+        backdrop-filter: blur(5px);
+      }
+      .info-box span { color: #facc15; font-weight: bold; text-shadow: 0 0 8px rgba(250, 204, 21, 0.5); }
+      
       .search{text-align:center;margin:30px 0}
       input{padding:14px 20px;border-radius:8px;border:1px solid #334155;width:clamp(200px,50%,400px);background:#1e293b;color:white;font-size:16px;outline:none;}
       button,.nav-btn{padding:14px 30px;border-radius:8px;background:#38bdf8;color:white;font-weight:bold;text-decoration:none;cursor:pointer;transition:0.3s;border:none;font-size:16px;display:inline-block;}
@@ -210,7 +226,11 @@ app.get("/", async (req, res) => {
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
       <div class="content-wrapper">
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
-        <div class="info-box">⚠️ Veriler yalnızca 30.03.2026 tarihinden itibaren kaydedilmektedir. Bu tarihten önceki istatistikler hesaplamaya dahil edilmez.</div>
+        
+        <div class="info-box">
+          ⚠️ Veriler yalnızca <span>30.03.2026</span> tarihinden itibaren kaydedilmektedir. Bu tarihten önceki istatistikler hesaplamaya dahil edilmez.
+        </div>
+        
         ${top3.length ? `<div class="top">
           <div class="box g">🥇 ${escapeHTML(top3[0].nick)}</div>
           <div class="box s">🥈 ${top3[1] ? escapeHTML(top3[1].nick) : "---"}</div>
