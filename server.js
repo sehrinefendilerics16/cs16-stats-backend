@@ -10,12 +10,13 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// 🔥 KRİTİK EKLENTİ: Sunucunu botlardan ve çökertmelerden koruyacak şifre.
-const ADMIN_KEY = "efendi2026"; 
-
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 let cache = {};
 const CACHE_LIMIT = 50;
+
+// 🔥 KRİTİK GÜVENLİK: Şifreyi koddan çıkardık. Render panelinden (Environment) çekecek.
+// Eğer Render'a eklemezsen, varsayılan olarak "sehrinefendileri" şifresi geçerli olur.
+const ADMIN_KEY = process.env.ADMIN_KEY || "sehrinefendileri"; 
 
 // ================= 1. RAM KORUMASI =================
 function cleanCache() {
@@ -72,7 +73,7 @@ async function fetchPlayers(retry = 2) {
     const $ = cheerio.load(data);
     const players = [];
     
-    // 🔥 KRİTİK EKLENTİ: Scraper Yedeği (Oyunyöneticisi tablo adını değiştirirse siten çökmez)
+    // YEDEK PLAN EKLENDİ: Sınıf adı değişirse bile veriyi bul
     const rows = $("table.CSS_Table_Example tr").length ? $("table.CSS_Table_Example tr") : $("table tr");
 
     rows.each((i, row) => {
@@ -108,7 +109,7 @@ async function fetchAndSave() {
     const players = await fetchPlayers();
     if (!players || players.length < 5) throw new Error("Yetersiz Veri");
 
-    // 🔥 KRİTİK EKLENTİ: Hash Öncesi Sıralama (Veritabanının boş yere şişmesini kesin olarak engeller)
+    // HASH KORUMASI: Satır yeri değişse bile sıralayıp kontrol et
     const sortedPlayers = [...players].sort((a, b) => a.nick.localeCompare(b.nick));
     const newHash = crypto.createHash("md5").update(JSON.stringify(sortedPlayers)).digest("hex");
     
@@ -243,7 +244,7 @@ app.get("/", async (req, res) => {
   }
 });
 
-// 🔥 KRİTİK EKLENTİ: Admin Koruması. Botlar artık sistemi çökertecek istekler gönderemez.
+// ================= 5. GÜVENLİ YÖNETİM =================
 app.get("/status", async (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi.");
   try {
@@ -259,7 +260,7 @@ app.get("/force-update", async (req, res) => {
   res.send("✅ Güncelleme Başarılı.");
 });
 
-// ================= 5. STARTUP =================
+// ================= 6. STARTUP =================
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
   app.listen(PORT, () => {
