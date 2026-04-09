@@ -188,45 +188,47 @@ app.get("/", async (req, res) => {
     <meta charset="UTF-8">
     <title>SEHRIN EFENDILERI - Sıralama</title>
     <style>
-      body{background:#0f172a;color:white;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;margin:0;padding-bottom:50px;}
+      body{background:#0f172a;color:white;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;margin:0;padding-bottom:50px; overflow-x: hidden;}
       
-      /* NEON ANA BAŞLIK TASARIMI */
-      .header-container {text-align:center; padding: 40px 20px; background: #020617;}
+      .header-container {text-align:center; padding: 40px 10px; background: #020617; width: 100%;}
       .main-title {
-        font-size: 36px; font-weight: 900; letter-spacing: 3px; margin: 0;
+        font-size: clamp(24px, 5vw, 42px); font-weight: 900; letter-spacing: 3px; margin: 0;
         text-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
       }
-      .ip-title { color: #38bdf8; font-size: 24px; margin-top: 5px; font-weight: 600; }
+      .ip-title { color: #38bdf8; font-size: clamp(18px, 3vw, 26px); margin-top: 10px; font-weight: 600; }
 
-      .top{display:flex;justify-content:center;gap:20px;margin:30px;flex-wrap:wrap;}
-      .box{padding:15px 30px;border-radius:12px;font-weight:bold;box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);}
+      /* İÇERİK GENİŞLETME */
+      .content-wrapper { width: 95%; max-width: 1400px; margin: 0 auto; }
+
+      .top{display:flex;justify-content:center;gap:20px;margin:30px 0;flex-wrap:wrap;}
+      .box{padding:15px 30px;border-radius:12px;font-weight:bold;box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); min-width: 200px; text-align:center;}
       .g{background:linear-gradient(135deg, #facc15, #ca8a04);color:#000}
       .s{background:linear-gradient(135deg, #e2e8f0, #94a3b8);color:#000}
       .b{background:linear-gradient(135deg, #fb923c, #c2410c);color:#000}
       
-      .info-box {text-align:center; background:#1e293b; border: 1px solid #334155; padding: 12px; margin: 20px auto; max-width: 600px; border-radius: 8px; color:#cbd5e1; font-size: 14px;}
-      .search{text-align:center;margin:25px}
-      input{padding:12px 20px;border-radius:8px;border:1px solid #334155;width:280px;outline:none;background:#1e293b;color:white;}
-      button{padding:12px 25px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer;font-weight:bold;color:white;transition:0.3s;margin-left:5px;}
+      .info-box {text-align:center; background:#1e293b; border: 1px solid #334155; padding: 15px; margin: 20px auto; width: 100%; max-width: 800px; border-radius: 8px; color:#cbd5e1; font-size: 15px;}
+      
+      .search{text-align:center;margin:30px 0}
+      input{padding:14px 20px;border-radius:8px;border:1px solid #334155; width: clamp(200px, 50%, 400px); outline:none;background:#1e293b;color:white; font-size: 16px;}
+      button{padding:14px 30px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer;font-weight:bold;color:white;transition:0.3s; font-size: 16px;}
       button:hover{background:#0284c7; transform: translateY(-2px);}
       
-      .ig-link{text-align:center;margin-bottom:20px;}
-      .ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:#020617;padding:12px 25px;border-radius:8px;display:inline-block;border: 1px solid #e1306c; transition:0.3s;}
+      .ig-link{text-align:center; margin: 20px 0;}
+      .ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:#020617;padding:12px 30px;border-radius:8px;display:inline-block;border: 1px solid #e1306c; transition:0.3s;}
       .ig-link a:hover{background:#e1306c;color:white;}
 
-      table{width:95%;max-width:1200px;margin:20px auto;border-collapse:collapse;background:#0f172a; overflow:hidden; border-radius:10px;}
-      th{background:#1e293b;padding:15px;text-align:center;font-size:13px;text-transform:uppercase;color:#94a3b8;}
-      td{padding:14px;text-align:center;border-bottom:1px solid #1e293b;font-size:15px;position:relative;transition:0.2s;}
+      /* TABLO GENİŞLETME */
+      .table-container { width: 100%; overflow-x: auto; background: #0f172a; border-radius:12px; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+      table{width: 100%; border-collapse:collapse; min-width: 900px;}
+      th{background:#1e293b;padding:20px 10px;text-align:center;font-size:14px;text-transform:uppercase;color:#94a3b8; letter-spacing: 1px;}
+      td{padding:18px 10px;text-align:center;border-bottom:1px solid #1e293b;font-size:16px;position:relative;transition:0.2s;}
       
-      /* E-SPOR HOVER EFEKTİ (FİKİR B) */
-      tr{transition: all 0.2s ease;}
-      tr:hover td {
-        background: rgba(56, 189, 248, 0.1); 
-        color: #38bdf8;
-      }
+      tr:hover td { background: rgba(56, 189, 248, 0.12); color: #38bdf8; }
       tr:hover td:first-child::before {
-        content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #38bdf8;
+        content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #38bdf8;
       }
+
+      b { font-weight: 700; }
     </style>
   </head>
   <body>
@@ -235,39 +237,43 @@ app.get("/", async (req, res) => {
       <div class="ip-title">(95.173.173.81)</div>
     </div>
 
-    <div class="ig-link">
-      <a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a>
+    <div class="content-wrapper">
+        <div class="ig-link">
+          <a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a>
+        </div>
+
+        <div class="info-box">
+          ⚠️ Tüm veriler 30.03.2026 tarihinden itibaren kaydedilmektedir.
+        </div>
+
+        <div class="top">
+          <div class="box g">🥇 ${top3[0] ? escapeHTML(top3[0].nick) : "---"}</div>
+          <div class="box s">🥈 ${top3[1] ? escapeHTML(top3[1].nick) : "---"}</div>
+          <div class="box b">🥉 ${top3[2] ? escapeHTML(top3[2].nick) : "---"}</div>
+        </div>
+
+        <form class="search">
+          <input name="search" placeholder="Oyuncu adını yaz..." value="${escapeHTML(search)}">
+          <button type="submit">Ara</button>
+        </form>
+
+        <div class="table-container">
+            <table>
+              <tr><th>SIRA</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr>
+              ${players.map((p,i)=>`
+                <tr>
+                  <td><b>${i+1}</b></td>
+                  <td>${escapeHTML(p.nick)}</td>
+                  <td>${p.total_kills}</td>
+                  <td>${p.total_deaths}</td>
+                  <td>${p.kd.toFixed(2)}</td>
+                  <td>${p.total_damage}</td>
+                  <td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td>
+                </tr>
+              `).join('')}
+            </table>
+        </div>
     </div>
-
-    <div class="info-box">
-      ⚠️ Tüm veriler 30.03.2026 tarihinden itibaren kaydedilmektedir.
-    </div>
-
-    <div class="top">
-      <div class="box g">🥇 ${top3[0] ? escapeHTML(top3[0].nick) : "---"}</div>
-      <div class="box s">🥈 ${top3[1] ? escapeHTML(top3[1].nick) : "---"}</div>
-      <div class="box b">🥉 ${top3[2] ? escapeHTML(top3[2].nick) : "---"}</div>
-    </div>
-
-    <form class="search">
-      <input name="search" placeholder="Oyuncu adını yaz..." value="${escapeHTML(search)}">
-      <button type="submit">Ara</button>
-    </form>
-
-    <table>
-      <tr><th>SIRA</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr>
-      ${players.map((p,i)=>`
-        <tr>
-          <td><b>${i+1}</b></td>
-          <td>${escapeHTML(p.nick)}</td>
-          <td>${p.total_kills}</td>
-          <td>${p.total_deaths}</td>
-          <td>${p.kd.toFixed(2)}</td>
-          <td>${p.total_damage}</td>
-          <td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td>
-        </tr>
-      `).join('')}
-    </table>
   </body>
   </html>`;
   cache[search] = { data: html, time: Date.now() };
