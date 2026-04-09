@@ -217,178 +217,59 @@ async function fetchAndSave() {
     cache = {};
 
   } catch (err) {
-    console.error(err.message);
+    console.error("FETCH ERROR:", err.message);
   } finally {
     isRunning = false;
   }
 }
 
+// ================= FIX DB =================
+app.get("/fix-db", async (req, res) => {
+  try {
+    await pool.query(`ALTER TABLE system_log ADD COLUMN last_hash TEXT;`);
+    res.send("OK - DB FIXED");
+  } catch (e) {
+    res.send("HATA: " + e.message);
+  }
+});
+
 // ================= ROUTES =================
 app.get("/status", async (req, res) => {
-  const result = await pool.query(`
-    SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1
-  `);
+  try {
+    const result = await pool.query(`
+      SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1
+    `);
 
-  const last = result.rows[0]?.last_fetch;
+    const last = result.rows[0]?.last_fetch;
 
-  const formatted = last
-    ? new Date(last).toLocaleString("tr-TR", {
-        timeZone: "Europe/Istanbul",
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-      })
-    : "Veri yok";
+    const formatted = last
+      ? new Date(last).toLocaleString("tr-TR", {
+          timeZone: "Europe/Istanbul",
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        })
+      : "Veri yok";
 
-  res.send(`
-  <html>
-  <head>
-  <style>
-    body {background:#0f172a;color:white;font-family:Arial;text-align:center;padding-top:80px;}
-    .box {background:#020617;display:inline-block;padding:30px 50px;border-radius:12px;}
-    .title {font-size:24px;margin-bottom:15px;}
-    .time {font-size:20px;color:#38bdf8;}
-  </style>
-  </head>
-  <body>
-    <div class="box">
-      <div class="title">📊 Sistem Son Güncelleme</div>
-      <div class="time">${formatted}</div>
-    </div>
-  </body>
-  </html>
-  `);
+    res.send(`
+    <html>
+    <body style="background:#0f172a;color:white;text-align:center;padding-top:80px;">
+      <h2>📊 Sistem Son Güncelleme</h2>
+      <h3>${formatted}</h3>
+    </body>
+    </html>
+    `);
+  } catch (err) {
+    res.send("HATA: " + err.message);
+  }
 });
 
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
-
-  res.send(`
-  <html>
-  <body style="background:#0f172a;color:white;font-family:Arial;text-align:center;padding-top:80px;">
-    <h2>✅ Veri başarıyla güncellendi</h2>
-  </body>
-  </html>
-  `);
-});
-
-// ================= PANEL (DEĞİŞMEDİ) =================
-app.get("/", async (req, res) => {
-
-  cleanCache();
-
-  const search = (req.query.search || "").toLowerCase();
-
-  if (cache[search] && Date.now() - cache[search].time < 30000) {
-    return res.send(cache[search].data);
-  }
-
-  const result = await pool.query(`
-    SELECT *,
-      (total_kills - total_deaths) AS puan,
-      (total_kills::float / GREATEST(total_deaths,1)) AS kd
-    FROM players
-    WHERE LOWER(nick) LIKE $1
-  `, [`%${search}%`]);
-
-  let players = result.rows;
-
-  players = players.map(p => {
-    const kd = p.kd || 0;
-    const hs = p.hs_percent || 0;
-    const acc = p.accuracy || 0;
-    const dmg = p.total_damage || 0;
-
-    const activity = Math.min(p.total_kills / 1000, 1);
-    const accSafe = Math.min(acc, 35);
-
-    const score =
-      ((p.total_kills - p.total_deaths) * 1) +
-      (kd * 2.5) +
-      (hs * 1.5) +
-      (accSafe * 0.3) +
-      (dmg / 800);
-
-    return { ...p, score: score * (0.7 + activity * 0.3) };
-  });
-
-  players.sort((a,b)=> b.score - a.score);
-
-  const top3 = players.slice(0,3);
-
-  let html = `
-  <html>
-  <head>
-  <style>
-  body{background:#0f172a;color:white;font-family:Arial;margin:0}
-  h1{text-align:center;padding:20px;background:#020617;margin:0}
-  .top{display:flex;justify-content:center;gap:20px;margin:20px}
-  .box{padding:15px 25px;border-radius:10px;font-weight:bold}
-  .g{background:#facc15;color:black}
-  .s{background:#cbd5f5;color:black}
-  .b{background:#fb923c;color:black}
-  .search{text-align:center;margin:15px}
-  input{padding:10px;border-radius:8px;border:none}
-  button{padding:10px;border-radius:8px;border:none;background:#38bdf8}
-  .info{text-align:center;color:#94a3b8;margin-top:10px}
-  table{width:95%;margin:auto;border-collapse:collapse}
-  th{background:#1e293b;padding:10px}
-  td{padding:8px;text-align:center;border-bottom:1px solid #334155}
-  </style>
-  </head>
-
-  <body>
-
-  <h1>SEHRIN EFENDILERI</h1>
-
-  <div class="info">
-    ⚠️ Sıralama verileri 30.03.2026 tarihinden itibaren hesaplanmaktadır.
-  </div>
-
-  <div class="top">
-    <div class="box g">🥇 ${top3[0]?.nick||""}</div>
-    <div class="box s">🥈 ${top3[1]?.nick||""}</div>
-    <div class="box b">🥉 ${top3[2]?.nick||""}</div>
-  </div>
-
-  <form class="search">
-    <input name="search" placeholder="Oyuncu ara..." value="${search}">
-    <button type="submit">Ara</button>
-  </form>
-
-  <table>
-  <tr>
-    <th>#</th>
-    <th>Oyuncu</th>
-    <th>Öldürme</th>
-    <th>Ölüm</th>
-    <th>K/D</th>
-    <th>Hasar</th>
-    <th>SKOR</th>
-  </tr>
-  `;
-
-  players.forEach((p,i)=>{
-    html+=`
-    <tr>
-      <td>${i+1}</td>
-      <td>${escapeHTML(p.nick || "")}</td>
-      <td>${p.total_kills}</td>
-      <td>${p.total_deaths}</td>
-      <td>${p.kd.toFixed(2)}</td>
-      <td>${p.total_damage}</td>
-      <td>${Math.round(p.score)}</td>
-    </tr>`;
-  });
-
-  html+=`</table></body></html>`;
-
-  cache[search] = { data: html, time: Date.now() };
-
-  res.send(html);
+  res.send("OK");
 });
 
 // ================= START =================
