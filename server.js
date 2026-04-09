@@ -228,16 +228,54 @@ app.get("/status", async (req, res) => {
   const result = await pool.query(`
     SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1
   `);
+
   const last = result.rows[0]?.last_fetch;
-  res.send(last ? last.toString() : "Veri yok");
+
+  const formatted = last
+    ? new Date(last).toLocaleString("tr-TR", {
+        timeZone: "Europe/Istanbul",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      })
+    : "Veri yok";
+
+  res.send(`
+  <html>
+  <head>
+  <style>
+    body {background:#0f172a;color:white;font-family:Arial;text-align:center;padding-top:80px;}
+    .box {background:#020617;display:inline-block;padding:30px 50px;border-radius:12px;}
+    .title {font-size:24px;margin-bottom:15px;}
+    .time {font-size:20px;color:#38bdf8;}
+  </style>
+  </head>
+  <body>
+    <div class="box">
+      <div class="title">📊 Sistem Son Güncelleme</div>
+      <div class="time">${formatted}</div>
+    </div>
+  </body>
+  </html>
+  `);
 });
 
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
-  res.send("OK");
+
+  res.send(`
+  <html>
+  <body style="background:#0f172a;color:white;font-family:Arial;text-align:center;padding-top:80px;">
+    <h2>✅ Veri başarıyla güncellendi</h2>
+  </body>
+  </html>
+  `);
 });
 
-// ================= PANEL =================
+// ================= PANEL (DEĞİŞMEDİ) =================
 app.get("/", async (req, res) => {
 
   cleanCache();
