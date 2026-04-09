@@ -209,17 +209,19 @@ app.get("/", async (req, res) => {
       
       .update-badge {
         text-align: center;
-        margin: -10px auto 25px;
-        font-size: 14px;
-        color: #94a3b8;
-        background: rgba(30, 41, 59, 0.6);
+        margin: -5px auto 30px;
+        font-size: 16px;
+        color: #e2e8f0;
+        background: rgba(30, 41, 59, 0.8);
         display: table;
-        padding: 6px 18px;
-        border-radius: 20px;
-        border: 1px solid rgba(56, 189, 248, 0.25);
+        padding: 10px 25px;
+        border-radius: 30px;
+        border: 1px solid rgba(56, 189, 248, 0.5);
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
         backdrop-filter: blur(5px);
+        font-weight: 500;
       }
-      .update-badge b { color: #38bdf8; font-weight: 700; }
+      .update-badge b { color: #38bdf8; font-weight: 800; }
 
       .search{text-align:center;margin:30px 0}
       input{padding:14px 20px;border-radius:8px;border:1px solid #334155;width:clamp(200px,50%,400px);background:#1e293b;color:white;font-size:16px;outline:none;}
@@ -249,7 +251,7 @@ app.get("/", async (req, res) => {
         </div>
 
         <div class="update-badge">
-          📡 Son Veri Senkronizasyonu: <b>${lastUpdateDate}</b>
+          🔄 Liste en son <b>${lastUpdateDate}</b> tarihinde güncellendi
         </div>
         
         ${top3.length ? `<div class="top">
