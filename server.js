@@ -17,22 +17,37 @@ let isRunning = false;
 let cache = {};
 const CACHE_LIMIT = 50;
 
-// ================= CACHE =================
+// ================= 1. CACHE CLEAN (Bellek Şişmesini Önler) =================
 function cleanCache() {
   const now = Date.now();
+
   for (const key in cache) {
-    if (now - cache[key].time > 30000) delete cache[key];
+    if (now - cache[key].time > 30000) {
+      delete cache[key];
+    }
+  }
+
+  const keys = Object.keys(cache);
+  if (keys.length > CACHE_LIMIT) {
+    const sorted = keys.sort((a, b) => cache[a].time - cache[b].time);
+    const toDelete = sorted.slice(0, keys.length - CACHE_LIMIT);
+    toDelete.forEach(k => delete cache[k]);
   }
 }
 
-// ================= XSS =================
+// ================= 2. XSS KORUMASI =================
 function escapeHTML(str) {
-  return str.replace(/[&<>"']/g, m => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
+  if (!str) return "";
+  return str.replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#039;"
   }[m]));
 }
 
-// ================= DB =================
+// ================= 3. VERİTABANI BAŞLATMA =================
 async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
@@ -50,6 +65,8 @@ async function initDB() {
     );
   `);
 
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_nick ON players (LOWER(nick));`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_log (
       id SERIAL PRIMARY KEY,
@@ -59,46 +76,54 @@ async function initDB() {
   `);
 }
 
-// ================= SCRAPER =================
-async function fetchPlayers() {
-  const { data } = await axios.get(BASE_URL);
-  const $ = cheerio.load(data);
-  const players = [];
+// ================= 4. SCRAPER (Oyunyöneticisinden Veri Çekme) =================
+async function fetchPlayers(retry = 2) {
+  try {
+    const { data } = await axios.get(BASE_URL, { timeout: 5000 });
 
-  $("table.CSS_Table_Example tr").each((i, row) => {
-    if (i === 0) return;
-    const cols = $(row).find("td");
-    if (cols.length !== 8) return;
+    const $ = cheerio.load(data);
+    const players = [];
 
-    const nick = $(cols[1]).text().trim();
-    const kills = parseInt($(cols[2]).text()) || 0;
-    const deaths = parseInt($(cols[4]).text()) || 0;
-    const damage = parseInt($(cols[7]).text()) || 0;
+    $("table.CSS_Table_Example tr").each((i, row) => {
+      if (i === 0) return; // Başlık satırını atla
 
-    const hs = ($(cols[3]).text().match(/\((.*?)%\)/) || [0,0])[1];
-    const acc = ($(cols[6]).text().match(/\((.*?)%\)/) || [0,0])[1];
+      const cols = $(row).find("td");
+      if (cols.length !== 8) return;
 
-    if (!nick || nick.includes("Toplam")) return;
+      const nick = $(cols[1]).text().trim();
+      const kills = parseInt($(cols[2]).text()) || 0;
 
-    players.push({
-      nick,
-      kills,
-      deaths,
-      damage,
-      hsPercent: parseFloat(hs) || 0,
-      accuracy: parseFloat(acc) || 0
+      const hsText = $(cols[3]).text().trim();
+      const hsMatch = hsText.match(/\((.*?)%\)/);
+      const hsPercent = hsMatch ? parseFloat(hsMatch[1]) : 0;
+
+      const deaths = parseInt($(cols[4]).text()) || 0;
+
+      const accText = $(cols[6]).text().trim();
+      const accMatch = accText.match(/\((.*?)%\)/);
+      const accuracy = accMatch ? parseFloat(accMatch[1]) : 0;
+
+      const damage = parseInt($(cols[7]).text()) || 0;
+
+      if (!nick || nick.includes("Toplam")) return; // Boş veya "Toplam" satırını atla
+
+      players.push({ nick, kills, deaths, damage, hsPercent, accuracy });
     });
-  });
 
-  return players;
+    return players;
+
+  } catch (err) {
+    if (retry > 0) return fetchPlayers(retry - 1);
+    throw err;
+  }
 }
 
-// ================= HASH =================
+// ================= 5. HASH KONTROLÜ (Gereksiz Veritabanı Yükünü Önler) =================
 function generateHash(players) {
   return crypto.createHash("md5").update(JSON.stringify(players)).digest("hex");
 }
 
-// ================= CORE =================
+// ================= 6. ANA MOTOR (Kümülatif ve Akıllı Kayıt) =================
 async function fetchAndSave() {
   if (isRunning) return;
   isRunning = true;
@@ -109,30 +134,100 @@ async function fetchAndSave() {
 
     const newHash = generateHash(players);
 
-    const last = await pool.query(`SELECT last_hash FROM system_log ORDER BY id DESC LIMIT 1`);
-    const lastHash = last.rows[0]?.last_hash;
+    const lastHashRes = await pool.query(`
+      SELECT last_hash FROM system_log ORDER BY id DESC LIMIT 1
+    `);
 
-    if (lastHash === newHash) return;
+    const lastHash = lastHashRes.rows[0]?.last_hash;
 
-    for (const p of players) {
+    // 🔥 Değişiklik Yoksa Sadece Log At ve Bekle
+    if (lastHash && lastHash === newHash) {
       await pool.query(`
-        INSERT INTO players (nick,total_kills,total_deaths,total_damage,last_kills,last_deaths,last_damage,hs_percent,accuracy)
-        VALUES ($1,$2,$3,$4,$2,$3,$4,$5,$6)
-        ON CONFLICT (nick) DO UPDATE SET
-        total_kills = EXCLUDED.total_kills,
-        total_deaths = EXCLUDED.total_deaths,
-        total_damage = EXCLUDED.total_damage,
-        last_kills = EXCLUDED.last_kills,
-        last_deaths = EXCLUDED.last_deaths,
-        last_damage = EXCLUDED.last_damage,
-        hs_percent = EXCLUDED.hs_percent,
-        accuracy = EXCLUDED.accuracy,
-        updated_at = CURRENT_TIMESTAMP
-      `, [p.nick, p.kills, p.deaths, p.damage, p.hsPercent, p.accuracy]);
+        INSERT INTO system_log (last_fetch, last_hash) 
+        VALUES (CURRENT_TIMESTAMP, $1)
+      `, [newHash]);
+      
+      // DB Şişmesini Önleme: 7 Günden Eski Logları Sil (Oyuncu verilerine DOKUNMAZ)
+      await pool.query(`DELETE FROM system_log WHERE last_fetch < NOW() - INTERVAL '7 days'`);
+      return;
     }
 
-    await pool.query(`INSERT INTO system_log (last_fetch,last_hash) VALUES (CURRENT_TIMESTAMP,$1)`, [newHash]);
-    cache = {};
+    const all = await pool.query(`SELECT nick, last_kills, last_deaths, last_damage, hs_percent, accuracy FROM players`);
+    const map = new Map(all.rows.map(p => [p.nick, p]));
+
+    for (const p of players) {
+      const old = map.get(p.nick);
+
+      // Yeni oyuncu geldi, hemen kasasını oluştur
+      if (!old) {
+        await pool.query(`
+          INSERT INTO players 
+          (nick,total_kills,total_deaths,total_damage,last_kills,last_deaths,last_damage,hs_percent,accuracy)
+          VALUES ($1,$2,$3,$4,$2,$3,$4,$5,$6)
+        `, [p.nick, p.kills, p.deaths, p.damage, p.hsPercent, p.accuracy]);
+        continue;
+      }
+
+      // Oyuncu oynamamış (Veri tamamen aynı)
+      if (
+        p.kills === old.last_kills &&
+        p.deaths === old.last_deaths &&
+        p.damage === old.last_damage &&
+        p.hsPercent === old.hs_percent &&
+        p.accuracy === old.accuracy
+      ) continue;
+
+      // Sadece HS veya İsabet Oranı değişmiş (Öldürme/Ölme aynı)
+      if (
+        p.kills === old.last_kills &&
+        p.deaths === old.last_deaths &&
+        p.damage === old.last_damage
+      ) {
+        await pool.query(`
+          UPDATE players SET
+            hs_percent = $2,
+            accuracy = $3,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE nick = $1
+        `, [p.nick, p.hsPercent, p.accuracy]);
+        continue;
+      }
+
+      // 🔥 HAYAT KURTARAN KÜMÜLATİF (DELTA) HESAPLAMA (Veri Asla Kaybolmaz)
+      const isReset =
+        p.kills < old.last_kills ||
+        p.deaths < old.last_deaths ||
+        p.damage < old.last_damage;
+
+      const dk = isReset ? p.kills : p.kills - old.last_kills;
+      const dd = isReset ? p.deaths : p.deaths - old.last_deaths;
+      const dmg = isReset ? p.damage : p.damage - old.last_damage;
+
+      await pool.query(`
+        UPDATE players SET
+          total_kills = total_kills + $2,
+          total_deaths = total_deaths + $3,
+          total_damage = total_damage + $4,
+          last_kills = $5,
+          last_deaths = $6,
+          last_damage = $7,
+          hs_percent = $8,
+          accuracy = $9,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE nick = $1
+      `, [p.nick, dk, dd, dmg, p.kills, p.deaths, p.damage, p.hsPercent, p.accuracy]);
+    }
+
+    // Başarılı Güncelleme Logu
+    await pool.query(`
+      INSERT INTO system_log (last_fetch, last_hash) 
+      VALUES (CURRENT_TIMESTAMP, $1)
+    `, [newHash]);
+
+    // DB Şişmesini Önleme: 7 Günden Eski Logları Sil
+    await pool.query(`DELETE FROM system_log WHERE last_fetch < NOW() - INTERVAL '7 days'`);
+
+    cache = {}; // Cache'i sıfırla ki yeni veriler anında yansısın
 
   } catch (err) {
     console.error(err.message);
@@ -141,17 +236,7 @@ async function fetchAndSave() {
   }
 }
 
-// ================= FIX DB =================
-app.get("/fix-db", async (req, res) => {
-  try {
-    await pool.query(`ALTER TABLE system_log ADD COLUMN last_hash TEXT;`);
-    res.send("OK");
-  } catch (e) {
-    res.send(e.message);
-  }
-});
-
-// ================= STATUS =================
+// ================= 7. YÖNETİM ROTALARI =================
 app.get("/status", async (req, res) => {
   const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
   const t = r.rows[0]?.last_fetch;
@@ -170,44 +255,58 @@ app.get("/status", async (req, res) => {
   `);
 });
 
-// ================= FORCE =================
 app.get("/force-update", async (req, res) => {
   await fetchAndSave();
   res.send(`
   <html>
   <body style="background:#0f172a;color:white;text-align:center;padding-top:100px;">
-    <h2>✅ Veri Güncellendi</h2>
+    <h2>✅ Veri Başarıyla Çekildi ve Güncellendi!</h2>
   </body>
   </html>
   `);
 });
 
-// ================= PANEL =================
+// ================= 8. OYUNCU PANELİ (Ana Sayfa) =================
 app.get("/", async (req, res) => {
-
-  cleanCache();
 
   const search = (req.query.search || "").toLowerCase();
 
+  // 🔥 Cache Okuma (Sistemi Hızlandırır)
+  if (cache[search] && Date.now() - cache[search].time < 30000) {
+    return res.send(cache[search].data);
+  }
+
   const result = await pool.query(`
     SELECT *,
-    (total_kills - total_deaths) AS puan,
-    (total_kills::float / GREATEST(total_deaths,1)) AS kd
+      (total_kills - total_deaths) AS puan,
+      (total_kills::float / GREATEST(total_deaths,1)) AS kd
     FROM players
     WHERE LOWER(nick) LIKE $1
   `, [`%${search}%`]);
 
-  let players = result.rows.map(p => {
-    const score =
-      (p.total_kills - p.total_deaths) +
-      (p.kd * 2.5) +
-      (p.hs_percent * 1.5) +
-      (Math.min(p.accuracy,35) * 0.3) +
-      (p.total_damage / 800);
+  let players = result.rows;
 
-    return { ...p, score };
+  // 🔥 ADİL SKOR ALGORİTMASI (Anlık Hesaplanır)
+  players = players.map(p => {
+    const kd = p.kd || 0;
+    const hs = p.hs_percent || 0;
+    const acc = p.accuracy || 0;
+    const dmg = p.total_damage || 0;
+
+    const activity = Math.min(p.total_kills / 1000, 1); // 1000 Kill Barajı
+    const accSafe = Math.min(acc, 35); // İsabet Oranı Güvenliği (%35 Max)
+
+    const score =
+      ((p.total_kills - p.total_deaths) * 1) +
+      (kd * 2.5) +
+      (hs * 1.5) +
+      (accSafe * 0.3) +
+      (dmg / 800);
+
+    return { ...p, score: score * (0.7 + activity * 0.3) };
   });
 
+  // Puanlara göre büyükten küçüğe sırala
   players.sort((a,b)=> b.score - a.score);
 
   const top3 = players.slice(0,3);
@@ -215,46 +314,62 @@ app.get("/", async (req, res) => {
   let html = `
   <html>
   <head>
+  <meta charset="UTF-8">
+  <title>SEHRIN EFENDILERI - İstatistik ve Sıralama</title>
   <style>
-  body{background:#0f172a;color:white;font-family:Arial;margin:0}
-  h1{text-align:center;padding:20px;background:#020617;margin:0}
-  .top{display:flex;justify-content:center;gap:20px;margin:20px}
-  .box{padding:15px 25px;border-radius:10px;font-weight:bold}
-  .g{background:#facc15;color:black}
-  .s{background:#cbd5f5;color:black}
-  .b{background:#fb923c;color:black}
-  .search{text-align:center;margin:20px}
-  .search input{padding:10px;border-radius:8px;border:none;width:250px}
-  .search button{padding:10px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer}
-  table{width:95%;margin:auto;border-collapse:collapse}
-  th{background:#1e293b;padding:10px}
-  td{padding:8px;text-align:center;border-bottom:1px solid #334155}
+  body{background:#0f172a;color:white;font-family:Arial, sans-serif;margin:0;padding-bottom:50px;}
+  h1{text-align:center;padding:20px;background:#020617;margin:0;letter-spacing:2px;}
+  .top{display:flex;justify-content:center;gap:20px;margin:20px;flex-wrap:wrap;}
+  .box{padding:15px 25px;border-radius:10px;font-weight:bold;box-shadow: 0 4px 6px rgba(0,0,0,0.3);}
+  .g{background:linear-gradient(135deg, #facc15, #ca8a04);color:black}
+  .s{background:linear-gradient(135deg, #cbd5f5, #94a3b8);color:black}
+  .b{background:linear-gradient(135deg, #fb923c, #c2410c);color:black}
+  .search{text-align:center;margin:15px}
+  input{padding:12px;border-radius:8px;border:none;width:250px;outline:none;}
+  button{padding:12px 20px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer;font-weight:bold;color:white;transition:0.3s;}
+  button:hover{background:#0284c7;}
+  .info{text-align:center;color:#94a3b8;margin-top:10px;font-size:14px;}
+  .ig-link{text-align:center;margin-top:20px;margin-bottom:15px;}
+  .ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;font-size:16px;background:#020617;padding:12px 25px;border-radius:8px;display:inline-block;border: 1px solid #e1306c; transition:0.3s;}
+  .ig-link a:hover{background:#e1306c;color:white;}
+  table{width:95%;max-width:1200px;margin:20px auto;border-collapse:collapse;box-shadow: 0 0 20px rgba(0,0,0,0.5);}
+  th{background:#1e293b;padding:12px;font-weight:bold;letter-spacing:1px;}
+  td{padding:10px;text-align:center;border-bottom:1px solid #334155;}
+  tr:hover td{background:#1e293b;}
   </style>
   </head>
 
   <body>
 
-  <h1>SEHRIN EFENDILERI</h1>
+  <h1>SEHRIN EFENDILERI (95.173.173.81)</h1>
+  
+  <div class="ig-link">
+    <a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram'da Bizi Takip Edin: @sehrinefendilerics16</a>
+  </div>
+
+  <div class="info">
+    ⚠️ Sıralama verileri sürekli ve birikimli olarak hesaplanmaktadır. Sıfırlanmaz!
+  </div>
 
   <div class="top">
-    <div class="box g">🥇 ${top3[0]?.nick||""}</div>
-    <div class="box s">🥈 ${top3[1]?.nick||""}</div>
-    <div class="box b">🥉 ${top3[2]?.nick||""}</div>
+    <div class="box g">🥇 ${top3[0] ? escapeHTML(top3[0].nick) : "Bekleniyor"}</div>
+    <div class="box s">🥈 ${top3[1] ? escapeHTML(top3[1].nick) : "Bekleniyor"}</div>
+    <div class="box b">🥉 ${top3[2] ? escapeHTML(top3[2].nick) : "Bekleniyor"}</div>
   </div>
 
   <form class="search">
-    <input name="search" placeholder="Oyuncu ara..." value="${search}">
+    <input name="search" placeholder="Oyuncu ara..." value="${escapeHTML(search)}">
     <button type="submit">Ara</button>
   </form>
 
   <table>
   <tr>
-    <th>#</th>
-    <th>Oyuncu</th>
-    <th>K</th>
-    <th>D</th>
-    <th>KD</th>
-    <th>DMG</th>
+    <th>SIRA</th>
+    <th>NICK</th>
+    <th>ÖLDÜRME</th>
+    <th>ÖLÜM</th>
+    <th>K/D ORANI</th>
+    <th>HASAR</th>
     <th>SKOR</th>
   </tr>
   `;
@@ -262,26 +377,33 @@ app.get("/", async (req, res) => {
   players.forEach((p,i)=>{
     html+=`
     <tr>
-      <td>${i+1}</td>
+      <td><b>${i+1}</b></td>
       <td>${escapeHTML(p.nick)}</td>
       <td>${p.total_kills}</td>
       <td>${p.total_deaths}</td>
       <td>${p.kd.toFixed(2)}</td>
       <td>${p.total_damage}</td>
-      <td>${Math.round(p.score)}</td>
+      <td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td>
     </tr>`;
   });
 
   html+=`</table></body></html>`;
 
+  // 🔥 Cache Yazma
+  cache[search] = { data: html, time: Date.now() };
+
   res.send(html);
 });
 
-// ================= START =================
+// ================= 9. SUNUCUYU BAŞLAT =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
-  await initDB();
-  await fetchAndSave();
-  setInterval(fetchAndSave, 180000);
+  await initDB();       // Veritabanını hazırla
+  await fetchAndSave(); // İlk açılışta hemen 1 kere veriyi çek
+  
+  setInterval(fetchAndSave, 180000); // Her 3 Dakikada (180.000 ms) bir Oyunyöneticisinden yeni veri çek
+  setInterval(cleanCache, 60000);    // Her 1 Dakikada (60.000 ms) bir şişen RAM'i (Cache) temizle
+  
+  console.log(`Sunucu ${PORT} portunda başarıyla çalışıyor. Sistem aktif!`);
 });
