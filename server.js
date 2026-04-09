@@ -15,7 +15,6 @@ let cache = {};
 const CACHE_LIMIT = 50;
 
 // 🔥 KRİTİK GÜVENLİK: Şifreyi koddan çıkardık. Render panelinden (Environment) çekecek.
-// Eğer Render'a eklemezsen, varsayılan olarak "sehrinefendileri" şifresi geçerli olur.
 const ADMIN_KEY = process.env.ADMIN_KEY || "sehrinefendileri"; 
 
 // ================= 1. RAM KORUMASI =================
@@ -73,7 +72,6 @@ async function fetchPlayers(retry = 2) {
     const $ = cheerio.load(data);
     const players = [];
     
-    // YEDEK PLAN EKLENDİ: Sınıf adı değişirse bile veriyi bul
     const rows = $("table.CSS_Table_Example tr").length ? $("table.CSS_Table_Example tr") : $("table tr");
 
     rows.each((i, row) => {
@@ -109,13 +107,11 @@ async function fetchAndSave() {
     const players = await fetchPlayers();
     if (!players || players.length < 5) throw new Error("Yetersiz Veri");
 
-    // HASH KORUMASI: Satır yeri değişse bile sıralayıp kontrol et
     const sortedPlayers = [...players].sort((a, b) => a.nick.localeCompare(b.nick));
     const newHash = crypto.createHash("md5").update(JSON.stringify(sortedPlayers)).digest("hex");
     
     const lastHashRes = await client.query(`SELECT id, last_hash FROM system_log ORDER BY id DESC LIMIT 1`);
     
-    // 🔥 DEĞİŞİKLİK BURADA: Veri aynıysa saati ASLA güncelleme, sadece işlemi durdur!
     if (lastHashRes.rows[0]?.last_hash === newHash) {
         return; 
     }
@@ -191,7 +187,6 @@ app.get("/", async (req, res) => {
       .box{padding:15px 30px;border-radius:12px;font-weight:bold;min-width:200px;text-align:center;box-shadow:0 10px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);}
       .g{background:linear-gradient(135deg,#facc15,#ca8a04);color:#000}.s{background:linear-gradient(135deg,#e2e8f0,#94a3b8);color:#000}.b{background:linear-gradient(135deg,#fb923c,#c2410c);color:#000}
       
-      /* YENİ TASARIM: Şık, neon uyarı kutusu */
       .info-box{
         text-align:center;
         background: rgba(15, 23, 42, 0.8);
@@ -228,7 +223,7 @@ app.get("/", async (req, res) => {
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
         
         <div class="info-box">
-          ⚠️ Veriler yalnızca <span>30.03.2026</span> tarihinden itibaren kaydedilmektedir. Bu tarihten önceki istatistikler hesaplamaya dahil edilmez.
+          ⚠️ Veriler yalnızca <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir. Bu tarihten önceki istatistikler hesaplamaya dahil edilmez.
         </div>
         
         ${top3.length ? `<div class="top">
