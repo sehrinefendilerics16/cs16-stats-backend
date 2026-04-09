@@ -170,17 +170,29 @@ app.get("/force-update", async (req, res) => {
   res.send("✅ Güncellendi!");
 });
 
-// ================= 7. OYUNCU PANELİ =================
+// ================= 7. OYUNCU PANELİ (SAYFALAMALI) =================
 app.get("/", async (req, res) => {
   const search = (req.query.search || "").toLowerCase();
-  if (cache[search] && Date.now() - cache[search].time < 30000) return res.send(cache[search].data);
+  const page = parseInt(req.query.page) || 1;
+  const limit = 100; // Her sayfada 100 kişi
+  
+  // Cache key artık sayfa numarasını da içermeli
+  const cacheKey = `${search}_p${page}`;
+  if (cache[cacheKey] && Date.now() - cache[cacheKey].time < 30000) return res.send(cache[cacheKey].data);
+
   const result = await pool.query(`SELECT *, (total_kills - total_deaths) AS puan, (total_kills::float / GREATEST(total_deaths,1)) AS kd FROM players WHERE LOWER(nick) LIKE $1`, [`%${search}%`]);
-  let players = result.rows.map(p => {
+  
+  let allPlayers = result.rows.map(p => {
     const activity = Math.min(p.total_kills / 1000, 1);
     const score = ((p.total_kills - p.total_deaths) * 1) + (p.kd * 2.5) + (p.hs_percent * 1.5) + (Math.min(p.accuracy, 35) * 0.3) + (p.total_damage / 800);
     return { ...p, score: score * (0.7 + activity * 0.3) };
   }).sort((a,b)=> b.score - a.score);
-  const top3 = players.slice(0,3);
+
+  const totalPlayers = allPlayers.length;
+  const totalPages = Math.ceil(totalPlayers / limit);
+  const offset = (page - 1) * limit;
+  const players = allPlayers.slice(offset, offset + limit);
+  const top3 = allPlayers.slice(0, 3); // Top 3 her zaman en iyileri gösterir
 
   let html = `
   <html>
@@ -189,49 +201,33 @@ app.get("/", async (req, res) => {
     <title>SEHRIN EFENDILERI - Sıralama</title>
     <style>
       body{background:#0f172a;color:white;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;margin:0;padding-bottom:50px; overflow-x: hidden;}
-      
       .header-container {text-align:center; padding: 40px 10px; background: #020617; width: 100%;}
-      .main-title {
-        font-size: clamp(24px, 5vw, 42px); font-weight: 900; letter-spacing: 3px; margin: 0;
-        text-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
-      }
+      .main-title { font-size: clamp(24px, 5vw, 42px); font-weight: 900; letter-spacing: 3px; margin: 0; text-shadow: 0 0 15px rgba(56, 189, 248, 0.5); }
       .ip-title { color: #38bdf8; font-size: clamp(18px, 3vw, 26px); margin-top: 10px; font-weight: 600; }
-
       .content-wrapper { width: 95%; max-width: 1400px; margin: 0 auto; }
-
       .top{display:flex;justify-content:center;gap:20px;margin:30px 0;flex-wrap:wrap;}
       .box{padding:15px 30px;border-radius:12px;font-weight:bold;box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); min-width: 200px; text-align:center;}
       .g{background:linear-gradient(135deg, #facc15, #ca8a04);color:#000}
       .s{background:linear-gradient(135deg, #e2e8f0, #94a3b8);color:#000}
       .b{background:linear-gradient(135deg, #fb923c, #c2410c);color:#000}
-      
       .info-box {text-align:center; background:#1e293b; border: 1px solid #334155; padding: 15px; margin: 20px auto; width: 100%; max-width: 800px; border-radius: 8px; color:#cbd5e1; font-size: 15px;}
-      
       .search{text-align:center;margin:30px 0}
       input{padding:14px 20px;border-radius:8px;border:1px solid #334155; width: clamp(200px, 50%, 400px); outline:none;background:#1e293b;color:white; font-size: 16px;}
-      button{padding:14px 30px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer;font-weight:bold;color:white;transition:0.3s; font-size: 16px;}
-      button:hover{background:#0284c7; transform: translateY(-2px);}
-      
+      button, .nav-btn{padding:14px 30px;border-radius:8px;border:none;background:#38bdf8;cursor:pointer;font-weight:bold;color:white;transition:0.3s; font-size: 16px; text-decoration:none; display:inline-block;}
+      button:hover, .nav-btn:hover{background:#0284c7; transform: translateY(-2px);}
+      .nav-btn.disabled{background:#334155; cursor:not-allowed; transform:none; opacity:0.5;}
       .ig-link{text-align:center; margin: 20px 0;}
       .ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:#020617;padding:12px 30px;border-radius:8px;display:inline-block;border: 1px solid #e1306c; transition:0.3s;}
       .ig-link a:hover{background:#e1306c;color:white;}
-
       .table-container { width: 100%; overflow-x: auto; background: #0f172a; border-radius:12px; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
       table{width: 100%; border-collapse:collapse; min-width: 900px;}
       th{background:#1e293b;padding:20px 10px;text-align:center;font-size:14px;text-transform:uppercase;color:#94a3b8; letter-spacing: 1px;}
       td{padding:18px 10px;text-align:center;border-bottom:1px solid #1e293b;font-size:16px;position:relative;transition:0.2s;}
-      
-      /* NİCK RENGİ GÜNCELLEMESİ */
       .player-nick { color: #38bdf8; font-weight: 600; }
-
       tr:hover td { background: rgba(56, 189, 248, 0.12); }
-      tr:hover .player-nick { color: #fff; } /* Üzerine gelince nick beyaza dönsün ki parlasın */
-      
-      tr:hover td:first-child::before {
-        content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #38bdf8;
-      }
-
-      b { font-weight: 700; }
+      tr:hover .player-nick { color: #fff; }
+      tr:hover td:first-child::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #38bdf8; }
+      .pagination { display:flex; justify-content:center; align-items:center; gap:20px; margin: 30px 0; }
     </style>
   </head>
   <body>
@@ -239,33 +235,28 @@ app.get("/", async (req, res) => {
       <h1 class="main-title">SEHRIN EFENDILERI</h1>
       <div class="ip-title">(95.173.173.81)</div>
     </div>
-
     <div class="content-wrapper">
         <div class="ig-link">
           <a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a>
         </div>
-
         <div class="info-box">
           ⚠️ Tüm veriler 30.03.2026 tarihinden itibaren kaydedilmektedir.
         </div>
-
         <div class="top">
           <div class="box g">🥇 ${top3[0] ? escapeHTML(top3[0].nick) : "---"}</div>
           <div class="box s">🥈 ${top3[1] ? escapeHTML(top3[1].nick) : "---"}</div>
           <div class="box b">🥉 ${top3[2] ? escapeHTML(top3[2].nick) : "---"}</div>
         </div>
-
-        <form class="search">
+        <form class="search" action="/">
           <input name="search" placeholder="Oyuncu adını yaz..." value="${escapeHTML(search)}">
           <button type="submit">Ara</button>
         </form>
-
         <div class="table-container">
             <table>
               <tr><th>SIRA</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr>
               ${players.map((p,i)=>`
                 <tr>
-                  <td><b>${i+1}</b></td>
+                  <td><b>${offset + i + 1}</b></td>
                   <td class="player-nick">${escapeHTML(p.nick)}</td>
                   <td>${p.total_kills}</td>
                   <td>${p.total_deaths}</td>
@@ -276,10 +267,16 @@ app.get("/", async (req, res) => {
               `).join('')}
             </table>
         </div>
+        
+        <div class="pagination">
+          <a href="/?page=${page - 1}&search=${search}" class="nav-btn ${page <= 1 ? 'disabled' : ''}" ${page <= 1 ? 'onclick="return false;"' : ''}>← Önceki</a>
+          <span>Sayfa ${page} / ${totalPages || 1}</span>
+          <a href="/?page=${page + 1}&search=${search}" class="nav-btn ${page >= totalPages ? 'disabled' : ''}" ${page >= totalPages ? 'onclick="return false;"' : ''}>Sonraki →</a>
+        </div>
     </div>
   </body>
   </html>`;
-  cache[search] = { data: html, time: Date.now() };
+  cache[cacheKey] = { data: html, time: Date.now() };
   res.send(html);
 });
 
