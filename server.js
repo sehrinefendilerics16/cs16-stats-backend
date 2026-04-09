@@ -139,7 +139,6 @@ async function fetchAndSave() {
 
     const lastHash = lastHashRes.rows[0]?.last_hash;
 
-    // 🔥 HASH AYNI → SADECE LOG AT
     if (lastHash && lastHash === newHash) {
       await pool.query(`
         INSERT INTO system_log (last_fetch, last_hash) 
@@ -163,18 +162,14 @@ async function fetchAndSave() {
         continue;
       }
 
-      // 🔥 HİÇBİR ŞEY DEĞİŞMEDİ → SKIP
       if (
         p.kills === old.last_kills &&
         p.deaths === old.last_deaths &&
         p.damage === old.last_damage &&
         p.hsPercent === old.hs_percent &&
         p.accuracy === old.accuracy
-      ) {
-        continue;
-      }
+      ) continue;
 
-      // 🔥 SADECE HS/ACC DEĞİŞTİ
       if (
         p.kills === old.last_kills &&
         p.deaths === old.last_deaths &&
@@ -187,7 +182,6 @@ async function fetchAndSave() {
             updated_at = CURRENT_TIMESTAMP
           WHERE nick = $1
         `, [p.nick, p.hsPercent, p.accuracy]);
-
         continue;
       }
 
@@ -229,47 +223,6 @@ async function fetchAndSave() {
   }
 }
 
-// ================= ROUTES =================
-app.get("/status", async (req, res) => {
-  const result = await pool.query(`
-    SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1
-  `);
-
-  const last = result.rows[0]?.last_fetch;
-
-  res.send(`
-  <html>
-  <head>
-  <style>
-    body {background:#0f172a;color:white;font-family:Arial;text-align:center;padding-top:50px;}
-    .box {background:#020617;display:inline-block;padding:30px;border-radius:12px;}
-    .time {color:#38bdf8;font-size:18px;}
-  </style>
-  </head>
-  <body>
-    <div class="box">
-      <h1>📊 Sistem Durumu</h1>
-      <div class="time">
-        ${last ? new Date(last).toLocaleString("tr-TR", {
-          timeZone: "Europe/Istanbul",
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit"
-        }) : "Veri yok"}
-      </div>
-    </div>
-  </body>
-  </html>
-  `);
-});
-
-app.get("/force-update", async (req, res) => {
-  await fetchAndSave();
-  res.send("OK");
-});
-
 // ================= PANEL =================
 app.get("/", async (req, res) => {
 
@@ -297,17 +250,18 @@ app.get("/", async (req, res) => {
     const acc = p.accuracy || 0;
     const dmg = p.total_damage || 0;
 
-    const activity = Math.min(p.total_kills / 150, 1);
+    const activity = Math.min(p.total_kills / 1000, 1);
     const accSafe = Math.min(acc, 35);
 
     const score =
       ((p.total_kills - p.total_deaths) * 1) +
-      (kd * 6) +
-      (hs * 2) +
-      (accSafe * 0.5) +
-      (dmg / 1200);
+      (kd * 2.5) +
+      (hs * 1.5) +
+      (accSafe * 0.3) +
+      (dmg / 800);
 
-    return { ...p, score: score * activity };
+    // 🔥 SADECE BURASI DEĞİŞTİ
+    return { ...p, score: score * (0.7 + activity * 0.3) };
   });
 
   players.sort((a,b)=> b.score - a.score);
