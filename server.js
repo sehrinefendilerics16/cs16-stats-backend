@@ -140,7 +140,7 @@ async function fetchAndSave() {
   }
 }
 
-// ================= 4. ARAYÜZ (TASARIM VE GÜNCELLEMELER) =================
+// ================= 4. ARAYÜZ (TASARIM VE MANTIK) =================
 app.get("/", async (req, res) => {
   const search = (req.query.search || "").toLowerCase();
   const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -188,66 +188,116 @@ app.get("/", async (req, res) => {
       .main-title{font-size:clamp(24px,5vw,42px);font-weight:900;letter-spacing:3px;margin:0;text-shadow:0 0 15px rgba(56,189,248,0.5);}
       .ip-title{color:#38bdf8;font-size:clamp(18px,3vw,26px);margin:10px 0;font-weight:600;}
       .content-wrapper{width:95%;max-width:1400px;margin:0 auto;}
-      .top{display:flex;justify-content:center;gap:20px;margin:30px 0;flex-wrap:wrap;}
-      .box{padding:15px 30px;border-radius:12px;font-weight:bold;min-width:200px;text-align:center;box-shadow:0 10px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);backdrop-filter: blur(5px);}
+      .top{display:flex;justify-content:center;gap:15px;margin:25px 0;flex-wrap:wrap;}
+      .box{padding:12px 20px;border-radius:12px;font-weight:bold;min-width:160px;text-align:center;box-shadow:0 10px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);backdrop-filter: blur(5px);}
       .g{background:linear-gradient(135deg,#facc15,#ca8a04);color:#000}.s{background:linear-gradient(135deg,#e2e8f0,#94a3b8);color:#000}.b{background:linear-gradient(135deg,#fb923c,#c2410c);color:#000}
       
       .info-box{
         text-align:center;
-        background: rgba(15, 23, 42, 0.85);
+        background: rgba(15, 23, 42, 0.9);
         border: 1px solid rgba(56, 189, 248, 0.3);
-        padding: 20px;
-        margin: 20px auto;
+        padding: 15px;
+        margin: 15px auto;
         max-width: 800px;
-        border-radius: 12px;
+        border-radius: 10px;
         color: #e2e8f0;
-        font-size: 16px;
+        font-size: 14px;
         box-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
         backdrop-filter: blur(5px);
       }
-      .info-box span { color: #facc15; font-weight: bold; text-shadow: 0 0 8px rgba(250, 204, 21, 0.5); }
+      .info-box span { color: #facc15; font-weight: bold; }
       
       .update-badge {
         text-align: center;
-        margin: -5px auto 30px;
-        font-size: 16px;
+        margin: 5px auto 25px;
+        font-size: 15px;
         color: #e2e8f0;
-        background: rgba(30, 41, 59, 0.8);
+        background: rgba(30, 41, 59, 0.85);
         display: table;
-        padding: 10px 25px;
+        padding: 8px 20px;
         border-radius: 30px;
-        border: 1px solid rgba(56, 189, 248, 0.5);
+        border: 1px solid rgba(56, 189, 248, 0.4);
         box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
         backdrop-filter: blur(5px);
         font-weight: 500;
       }
       .update-badge b { color: #38bdf8; font-weight: 800; }
 
-      .search{text-align:center;margin:30px 0}
-      input{padding:14px 20px;border-radius:8px;border:1px solid #334155;width:clamp(200px,50%,400px);background:#1e293b;color:white;font-size:16px;outline:none;}
-      button,.nav-btn{padding:14px 30px;border-radius:8px;background:#38bdf8;color:white;font-weight:bold;text-decoration:none;cursor:pointer;transition:0.3s;border:none;font-size:16px;display:inline-block;}
-      button:hover,.nav-btn:hover{background:#0284c7;transform:translateY(-2px);}
-      .ig-link{text-align:center;margin:20px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:12px 30px;border-radius:8px;display:inline-block;border:1px solid #e1306c;transition:0.3s;}
-      .ig-link a:hover{background:#e1306c;color:white;}
-      .table-container{width:100%;overflow-x:auto;background:rgba(15, 23, 42, 0.85);border-radius:12px;box-shadow:0 0 30px rgba(0,0,0,0.5);backdrop-filter: blur(10px);}
-      table{width:100%;border-collapse:collapse;min-width:900px;}
-      th{background:rgba(30, 41, 59, 0.9);padding:20px;color:#94a3b8;text-transform:uppercase;font-size:14px;}
-      td{padding:18px;text-align:center;border-bottom:1px solid #1e293b;font-size:16px;position:relative;transition:0.2s;}
-      .player-nick{color:#38bdf8;font-weight:600;}
-      tr:hover td{background:rgba(56,189,248,0.12);}
-      tr:hover .player-nick{color:#fff;}
-      tr:hover td:first-child::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:#38bdf8;}
-      .pagination{display:flex;justify-content:center;align-items:center;gap:20px;margin:30px 0;}
+      .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:10px; flex-wrap:wrap;}
+      input{padding:12px 15px;border-radius:8px;border:1px solid #334155;width:clamp(200px,60%,400px);background:#1e293b;color:white;font-size:16px;outline:none;}
+      
+      .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:10px 25px;border-radius:8px;display:inline-block;border:1px solid #e1306c;transition:0.3s;}
+      
+      /* TABLO TASARIMI (OYUNYONETICISI STILI) */
+      .table-container{
+        width:100%;
+        overflow-x:auto;
+        background:rgba(15, 23, 42, 0.9);
+        border-radius:8px;
+        box-shadow:0 0 30px rgba(0,0,0,0.6);
+        border: 1px solid #1e293b;
+      }
+      table{width:100%;border-collapse:collapse;min-width:800px; table-layout: fixed;}
+      
+      /* Sütun Genişlikleri */
+      th:nth-child(1), td:nth-child(1) { width: 60px; } /* SIRA */
+      th:nth-child(2), td:nth-child(2) { width: 220px; text-align: left; padding-left: 20px; } /* NICK */
+      
+      th{
+        background:#020617; /* Sert siyah başlık */
+        padding:15px;
+        color:#38bdf8;
+        text-transform:uppercase;
+        font-size:13px;
+        border: 1px solid #1e293b; /* Dikey çizgiler */
+        letter-spacing: 1px;
+      }
+      td{
+        padding:12px;
+        text-align:center;
+        border: 1px solid #1e293b; /* Dikey çizgiler */
+        font-size: 15px;
+      }
+      
+      /* Zebra Deseni */
+      tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
+      tr:nth-child(odd) td { background: rgba(15, 23, 42, 0.2); }
 
+      .player-nick{color:#38bdf8;font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+      
+      tr:hover td{background:rgba(56,189,248,0.15) !important;}
+      
       .kd-high { color: #00ff00 !important; font-weight: bold; } 
       .kd-low { color: #ff4500 !important; }
+
+      .pagination{display:flex;justify-content:center;align-items:center;gap:15px;margin:30px 0;}
+      button,.nav-btn{padding:12px 25px;border-radius:8px;background:#38bdf8;color:white;font-weight:bold;text-decoration:none;cursor:pointer;transition:0.3s;border:none;font-size:15px;}
+
+      /* MOBIL UYUMLULUK KURALLARI */
+      @media (max-width: 768px) {
+        .content-wrapper { width: 100%; padding: 5px; box-sizing: border-box;}
+        input { width: 100%; }
+        button { width: 100%; }
+        .box { min-width: 120px; font-size: 13px; padding: 10px; }
+        
+        /* Mobilde Nick Sütununu Sabitleme */
+        .table-container { position: relative; }
+        th:nth-child(2), td:nth-child(2) {
+          position: sticky;
+          left: 0;
+          z-index: 2;
+          background: #0f172a !important;
+          border-right: 2px solid #38bdf8;
+        }
+        th:nth-child(2) { z-index: 3; background: #020617 !important; }
+      }
     </style></head><body>
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
       <div class="content-wrapper">
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
         
         <div class="info-box">
-          ⚠️ Veriler yalnızca <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir. Bu tarihten önceki istatistikler hesaplamaya dahil edilmez.
+          ⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir. Bu tarihten önceki veriler hesaplamaya dahil değildir.
         </div>
 
         <div class="update-badge">
@@ -259,26 +309,46 @@ app.get("/", async (req, res) => {
           <div class="box s">🥈 ${top3[1] ? escapeHTML(top3[1].nick) : "---"}</div>
           <div class="box b">🥉 ${top3[2] ? escapeHTML(top3[2].nick) : "---"}</div>
         </div>` : ''}
-        <form class="search"><input name="search" placeholder="Oyuncu ara..." value="${escapeHTML(search)}"><button type="submit">Ara</button></form>
-        <div class="table-container"><table>
-          <tr><th>SIRA</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr>
-          ${players.map((p, i) => {
-            const kd = (p.total_kills / Math.max(p.total_deaths, 1));
-            let kdClass = "";
-            if(kd >= 2.0) kdClass = "kd-high";
-            else if(kd < 1.0) kdClass = "kd-low";
+        
+        <form class="search">
+          <input name="search" placeholder="Oyuncu ara..." value="${escapeHTML(search)}">
+          <button type="submit">Ara</button>
+        </form>
 
-            return `<tr>
-              <td><b>${offset + i + 1}</b></td>
-              <td class="player-nick">${escapeHTML(p.nick)}</td>
-              <td>${p.total_kills}</td>
-              <td>${p.total_deaths}</td>
-              <td class="${kdClass}">${kd.toFixed(2)}</td>
-              <td>${p.total_damage}</td>
-              <td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td>
-            </tr>`;
-          }).join('')}
-        </table></div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>SIRA</th>
+                <th>NICK</th>
+                <th>ÖLDÜRME</th>
+                <th>ÖLÜM</th>
+                <th>K/D</th>
+                <th>HASAR</th>
+                <th>SKOR</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${players.map((p, i) => {
+                const kd = (p.total_kills / Math.max(p.total_deaths, 1));
+                let kdClass = "";
+                if(kd >= 2.0) kdClass = "kd-high";
+                else if(kd < 1.0) kdClass = "kd-low";
+
+                return `<tr>
+                  <td><b>${offset + i + 1}</b></td>
+                  <td class="player-nick">${escapeHTML(p.nick)}</td>
+                  <td>${p.total_kills}</td>
+                  <td>${p.total_deaths}</td>
+                  <td class="${kdClass}">${kd.toFixed(2)}</td>
+                  <td>${p.total_damage}</td>
+                  <td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+
         <div class="pagination">
           <a href="/?page=${page - 1}&search=${search}" class="nav-btn ${page <= 1 ? 'disabled' : ''}">← Geri</a>
           <span>Sayfa ${page} / ${totalPages || 1}</span>
@@ -294,45 +364,20 @@ app.get("/", async (req, res) => {
   }
 });
 
-// ================= 5. GÜVENLİ YÖNETİM (ŞIK TASARIM) =================
+// ================= 5. GÜVENLİ YÖNETİM =================
 app.get("/status", async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send(`<html><body style="background:#0f172a;color:#ef4444;font-family:'Segoe UI',sans-serif;text-align:center;padding-top:150px;"><h2>⛔ Erişim Reddedildi</h2><p>Bu alana giriş yetkiniz bulunmamaktadır.</p></body></html>`);
-  
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   try {
     const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const formatted = r.rows[0]?.last_fetch ? new Date(r.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "Veri yok";
-    
-    res.send(`
-      <html>
-        <body style="background:#0f172a;color:white;font-family:'Segoe UI',sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;">
-          <div style="background:#1e293b;border:1px solid #334155;padding:40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);text-align:center;">
-            <h2 style="color:#38bdf8;margin-top:0;letter-spacing:1px;">📊 Arşiv Kayıt Durumu</h2>
-            <p style="font-size:18px;color:#cbd5e1;margin-bottom:0;">Son Senkronizasyon</p>
-            <h1 style="color:#facc15;margin-top:10px;font-size:32px;">${formatted}</h1>
-          </div>
-        </body>
-      </html>
-    `);
-  } catch (e) { 
-    res.send(`<html><body style="background:#0f172a;color:#ef4444;font-family:'Segoe UI',sans-serif;text-align:center;padding-top:150px;"><h2>❌ Sistem Hatası</h2></body></html>`); 
-  }
+    res.send(`Sistem Aktif. Son Veri Çekimi: ${formatted}`);
+  } catch (e) { res.status(500).send("Hata"); }
 });
 
 app.get("/force-update", async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send(`<html><body style="background:#0f172a;color:#ef4444;font-family:'Segoe UI',sans-serif;text-align:center;padding-top:150px;"><h2>⛔ Erişim Reddedildi</h2><p>Bu alana giriş yetkiniz bulunmamaktadır.</p></body></html>`);
-  
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   await fetchAndSave();
-  
-  res.send(`
-    <html>
-      <body style="background:#0f172a;color:white;font-family:'Segoe UI',sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;">
-        <div style="background:#1e293b;border:1px solid #334155;padding:40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);text-align:center;">
-          <h2 style="color:#10b981;margin-top:0;letter-spacing:1px;">⚙️ Sisteme Müdahale Edildi</h2>
-          <p style="font-size:20px;color:#cbd5e1;margin-bottom:0;">Veritabanı Arşivi Başarıyla Güncellendi.</p>
-        </div>
-      </body>
-    </html>
-  `);
+  res.send("Manuel Güncelleme Tetiklendi.");
 });
 
 // ================= 6. STARTUP =================
@@ -341,6 +386,6 @@ initDB().then(() => {
   app.listen(PORT, () => {
     fetchAndSave();
     setInterval(fetchAndSave, 180000); // 3 dk
-    setInterval(cleanCache, 60000); // RAM temizliğini tetikle
+    setInterval(cleanCache, 60000); 
   });
 });
