@@ -106,13 +106,15 @@ async function fetchAndSave() {
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ (GERÇEK SIRALAMA VE MADALYALAR) =================
+// ================= 4. ARAYÜZ (100 OYUNCU VE SAYFALAMA) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
   const search = (req.query.search || "").toLowerCase();
+  
+  // SAYFALAMA AYARLARI
   const page = Math.max(1, parseInt(req.query.page) || 1);
-  const limit = 100;
+  const limit = 100; // HER SAYFADA TAM 100 OYUNCU
   const offset = (page - 1) * limit;
   const cacheKey = `${search}_p${page}_${isMobile}`;
 
@@ -134,6 +136,8 @@ app.get("/", async (req, res) => {
     const lastUpdateDate = logRes.rows[0]?.last_fetch ? new Date(logRes.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "---";
     const escapeHTML = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
     
+    const searchParam = search ? `&search=${encodeURIComponent(search)}` : "";
+
     let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>SEHRIN EFENDILERI</title>
       <link rel="icon" href="${logoUrl}">
@@ -167,11 +171,17 @@ app.get("/", async (req, res) => {
       .kd-high { color: #00ff00 !important; font-weight: bold; }
       .kd-low { color: #ff4500 !important; }
 
-      /* MADALYA BUTONLARI CSS (BRONZ EKLENDİ, TİPLER EŞİTLENDİ) */
+      /* MADALYA BUTONLARI CSS */
       .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; min-width: 50px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
       .rank-1 { background: linear-gradient(135deg, #facc15, #eab308); color: #422006; box-shadow: 0 0 12px rgba(250, 204, 21, 0.5); border: 1px solid #fef08a; }
       .rank-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #0f172a; box-shadow: 0 0 12px rgba(226, 232, 240, 0.5); border: 1px solid #f8fafc; }
       .rank-3 { background: linear-gradient(135deg, #fdba74, #ea580c); color: #431407; box-shadow: 0 0 12px rgba(234, 88, 12, 0.5); border: 1px solid #fed7aa; }
+
+      /* SAYFALAMA (PAGINATION) CSS */
+      .pagination { display: flex; justify-content: center; gap: 15px; margin: 30px 0; align-items: center; }
+      .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; transition: 0.3s; font-size: 15px; }
+      .pagination a:hover { background: #38bdf8; color: white; transform: translateY(-2px); }
+      .pagination span { background: #020617; border: 1px solid #1e293b; color: white; padding: 12px 25px; border-radius: 6px; font-weight: bold; font-size: 15px; }
 
       @media (max-width: 768px) {
         .info-box { font-size: 13px; padding: 12px; } .info-box span { font-size: 14px; }
@@ -183,6 +193,8 @@ app.get("/", async (req, res) => {
         th:nth-child(n+3), td:nth-child(n+3) { width: 95px !important; min-width: 95px !important; }
         th:nth-child(1), td:nth-child(1) { width: 60px !important; min-width: 60px !important; }
         th:nth-child(2) { z-index: 11 !important; background: #020617 !important; }
+        .pagination { flex-direction: column; gap: 10px; width: 90%; margin: 20px auto; }
+        .pagination a, .pagination span { width: 100%; text-align: center; }
       }
     </style></head><body>
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
@@ -211,7 +223,15 @@ app.get("/", async (req, res) => {
 
           return `<tr><td>${rankDisplay}</td><td><span class="player-nick">${escapeHTML(p.nick)}</span></td><td>${p.total_kills}</td><td>${p.total_deaths}</td><td class="${kd >= 2.0 ? 'kd-high' : (kd < 1.0 ? 'kd-low' : '')}">${kd.toFixed(2)}</td><td>${p.total_damage}</td><td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td></tr>`;
         }).join('')}
-        </tbody></table></div></div></body></html>`;
+        </tbody></table></div>
+        
+        <div class="pagination">
+          ${page > 1 ? `<a href="/?page=${page - 1}${searchParam}">« Önceki Sayfa</a>` : ''}
+          <span>Sayfa ${page}</span>
+          ${players.length === limit ? `<a href="/?page=${page + 1}${searchParam}">Sonraki Sayfa »</a>` : ''}
+        </div>
+
+      </div></body></html>`;
     cache[cacheKey] = { data: html, time: Date.now() }; res.send(html);
   } catch (err) { res.status(500).send("Hata."); }
 });
