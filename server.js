@@ -118,7 +118,6 @@ app.get("/", async (req, res) => {
   if (cache[cacheKey] && Date.now() - cache[cacheKey].time < 30000) return res.send(cache[cacheKey].data);
 
   try {
-    // TOPLAM OYUNCU SAYISINI AL
     const totalRes = await pool.query(`SELECT COUNT(*) FROM players WHERE LOWER(nick) LIKE $1`, [`%${search}%`]);
     const totalPlayers = parseInt(totalRes.rows[0].count);
     const totalPages = Math.ceil(totalPlayers / limit) || 1;
@@ -136,7 +135,6 @@ app.get("/", async (req, res) => {
     const result = await pool.query(query, [`%${search}%`, limit, offset]);
     const players = result.rows;
     
-    // TARİH FORMATLAMA (10.04.2026 21:52)
     const rawDate = logRes.rows[0]?.last_fetch;
     const lastUpdateDate = rawDate ? new Date(rawDate).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(/\//g, ".") : "---";
     
@@ -155,17 +153,18 @@ app.get("/", async (req, res) => {
       .info-box{ text-align:center; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); padding: 18px; margin: 20px auto; max-width: 1200px; border-radius: 10px; font-size: 16px; }
       .info-box span { color: #facc15; font-weight: bold; font-size: 18px; }
       .update-badge { text-align: center; margin: 0 auto 30px; font-size: 15px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.3); }
-      .update-badge b { color: #38bdf8; font-weight: 800; }
       .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px; flex-wrap: wrap;}
       input{padding:14px;border-radius:6px;border:1px solid #334155;width:50%;background:#1e293b;color:white;outline:none;font-size:16px;}
       button{padding:14px 30px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;font-size:16px;}
-      .reset-btn { padding: 14px 20px; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; }
+      .reset-btn { padding: 14px 20px; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; display:flex; align-items:center; justify-content:center;}
       .table-container{ width:100%; overflow-x:auto; background:rgba(15, 23, 42, 0.95); border-radius:8px; border: 1px solid #1e293b; }
       table{width:100%; border-collapse:collapse; table-layout: fixed; min-width: 800px;}
       th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; }
       th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:13px; letter-spacing: 1px; }
       tr:hover td { background: rgba(56, 189, 248, 0.2) !important; }
-      .player-nick{ color:#38bdf8; font-weight:600; text-align: left; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      
+      /* STICKY COLUMN FIX (KAYMAYI ÖNLEYEN KRİTİK ALAN) */
+      .player-nick{ color:#38bdf8; font-weight:600; text-align: left; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
       
       .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; min-width: 50px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
       .rank-1 { background: linear-gradient(135deg, #facc15, #eab308); color: #422006; border: 1px solid #fef08a; }
@@ -173,12 +172,19 @@ app.get("/", async (req, res) => {
       .rank-3 { background: linear-gradient(135deg, #fdba74, #ea580c); color: #431407; border: 1px solid #fed7aa; }
       
       .pagination { display: flex; justify-content: center; gap: 15px; margin: 30px 0; align-items: center; }
-      .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; transition: 0.3s; }
-      .pagination a:hover { background: #38bdf8; color: white; }
+      .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; }
       .pagination span { background: #020617; border: 1px solid #1e293b; color: white; padding: 12px 25px; border-radius: 6px; font-weight: bold; }
 
       @media (max-width: 768px) {
-        th:nth-child(2), td:nth-child(2) { position: sticky; left: 0; z-index: 10; background: #111a2e !important; width: 130px !important; }
+        th:nth-child(2), td:nth-child(2) { 
+          position: sticky !important; 
+          left: 0 !important; 
+          z-index: 99 !important; 
+          background: #0f172a !important; 
+          width: 130px !important;
+          box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+        }
+        th:nth-child(2) { z-index: 100 !important; }
         .pagination { flex-direction: column; width: 90%; margin: 20px auto; gap: 10px; }
       }
       </style></head><body>
