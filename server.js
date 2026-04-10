@@ -140,7 +140,16 @@ app.get("/", async (req, res) => {
     
     const escapeHTML = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
     
-    let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    let html = `<html><head>
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-EGWK9NSWZ2"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        gtag('config', 'G-EGWK9NSWZ2');
+      </script>
+      <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>SEHRIN EFENDILERI</title>
       <link rel="icon" href="${logoUrl}">
       <style>
