@@ -283,10 +283,10 @@ app.get("/", async (req, res) => {
           position: -webkit-sticky;
           position: sticky;
           left: 0;
-          z-index: 10 !important; /* Diğer her şeyin üstünde tut */
-          background: #111a2e !important; /* Arka planı %100 kapatan opak renk */
-          border-right: 2px solid #38bdf8;
-          box-shadow: 2px 0 5px rgba(0,0,0,0.8);
+          z-index: 10 !important;
+          background: #111a2e !important;
+          border-right: none !important; /* NOKTALARI TEMIZLEYEN SATIR */
+          box-shadow: 4px 0 8px rgba(0,0,0,0.9); /* ARKANIN SIZMASINI ENGELLEYEN GÖLGE */
         }
         
         /* Zebra deseni için opaklığı koru */
@@ -300,6 +300,7 @@ app.get("/", async (req, res) => {
           position: sticky !important;
           left: 0 !important;
           z-index: 10 !important;
+          background: #111a2e !important;
         }
 
         th:nth-child(2) { z-index: 11 !important; background: #020617 !important; }
