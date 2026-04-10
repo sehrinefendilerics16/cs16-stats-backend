@@ -287,14 +287,16 @@ app.get("/", async (req, res) => {
           background: #111a2e !important;
           border-right: none !important;
           box-shadow: 4px 0 8px rgba(0,0,0,0.9);
-          max-width: 140px; /* Mobilde Nick alanını daraltıyoruz */
+          width: 50% !important; /* Mobilde Nick sütununa ferah alan veriyoruz */
+          min-width: 150px !important;
         }
         
-        /* İstatistik sütunlarını mobilde daraltıyoruz */
+        /* İstatistik sütunlarını mobilde daraltıp rakamlara göre presliyoruz */
         th:nth-child(n+3), td:nth-child(n+3) {
-          width: auto !important;
-          padding: 8px 5px !important;
+          width: 65px !important; /* Rakamlar sığacak kadar daraltıldı */
+          padding: 8px 2px !important;
           font-size: 13px !important;
+          text-align: center !important;
         }
 
         tr:nth-child(even) td:nth-child(2) { background: #1a243a !important; }
