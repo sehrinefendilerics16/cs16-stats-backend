@@ -271,23 +271,38 @@ app.get("/", async (req, res) => {
       .pagination{display:flex;justify-content:center;align-items:center;gap:15px;margin:30px 0;}
       button,.nav-btn{padding:12px 25px;border-radius:8px;background:#38bdf8;color:white;font-weight:bold;text-decoration:none;cursor:pointer;transition:0.3s;border:none;font-size:15px;}
 
-      /* MOBIL UYUMLULUK VE MASKELENMIS NICK SUTUNU */
+      /* MOBIL UYUMLULUK VE KESIN SABITLIK KURALLARI */
       @media (max-width: 768px) {
         .content-wrapper { width: 100%; padding: 5px; box-sizing: border-box;}
         input { width: 100%; }
         button { width: 100%; }
         .box { min-width: 120px; font-size: 13px; padding: 10px; }
         
-        /* Nick Sütununu Katı Duvar Yaparak Sızmayı Engelliyoruz */
+        /* Nick Sütununu Agresif Bir Şekilde Sabitliyoruz */
         th:nth-child(2), td:nth-child(2) {
+          position: -webkit-sticky;
           position: sticky;
           left: 0;
-          z-index: 2;
-          background: #111a2e !important; /* Arka veriyi kapatan opak renk */
+          z-index: 10 !important; /* Diğer her şeyin üstünde tut */
+          background: #111a2e !important; /* Arka planı %100 kapatan opak renk */
           border-right: 2px solid #38bdf8;
-          box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+          box-shadow: 2px 0 5px rgba(0,0,0,0.8);
         }
-        th:nth-child(2) { z-index: 3; background: #020617 !important; }
+        
+        /* Zebra deseni için opaklığı koru */
+        tr:nth-child(even) td:nth-child(2) { background: #1a243a !important; }
+        tr:nth-child(odd) td:nth-child(2) { background: #111a2e !important; }
+        
+        /* Tıklama/Seçilme Anında Sabitliği Koru */
+        tr:active td:nth-child(2), 
+        tr:focus td:nth-child(2),
+        td:nth-child(2):active {
+          position: sticky !important;
+          left: 0 !important;
+          z-index: 10 !important;
+        }
+
+        th:nth-child(2) { z-index: 11 !important; background: #020617 !important; }
       }
     </style></head><body>
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
