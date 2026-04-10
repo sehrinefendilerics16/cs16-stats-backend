@@ -15,6 +15,9 @@ let cache = {};
 const CACHE_LIMIT = 50;
 const ADMIN_KEY = process.env.ADMIN_KEY || "sehrinefendileri"; 
 
+// SUNUCU LOGO URL (FAVICON İÇİN)
+const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/image_44db98.png";
+
 // ================= 1. RAM KORUMASI =================
 function cleanCache() {
   const now = Date.now();
@@ -129,7 +132,10 @@ app.get("/", async (req, res) => {
     const lastUpdateDate = logRes.rows[0]?.last_fetch ? new Date(logRes.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "---";
     const escapeHTML = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
     
-    let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SEHRIN EFENDILERI</title><style>
+    let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>SEHRIN EFENDILERI</title>
+      <link rel="icon" href="${logoUrl}" type="image/png">
+      <style>
       body{ background: linear-gradient(rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.75)), url('https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg') no-repeat center center fixed; background-size: cover; color:white; font-family:'Segoe UI',sans-serif; margin:0; padding-bottom:50px; overflow-x:hidden; }
       .header-container{text-align:center;padding:30px 10px;background:rgba(2, 6, 23, 0.85);}
       .main-title{font-size:clamp(22px,5vw,42px);font-weight:900;letter-spacing:2px;margin:0;text-shadow:0 0 15px rgba(56,189,248,0.5);}
@@ -196,7 +202,9 @@ app.get("/", async (req, res) => {
 
 // ================= 5. YÖNETİM LİNKLERİ (EFECTİF VE PROFESYONEL TASARIM) =================
 const adminLayout = (title, message, subMessage) => `
-  <html><head><meta charset="UTF-8"><title>${title}</title><style>
+  <html><head><meta charset="UTF-8"><title>${title}</title>
+  <link rel="icon" href="${logoUrl}" type="image/png">
+  <style>
     body{ background: #020617; color:white; font-family:'Segoe UI',sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
     .card{ background: rgba(15, 23, 42, 0.95); border: 1px solid #38bdf8; padding: 40px; border-radius: 12px; text-align: center; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); max-width: 500px; }
     h1{ color: #38bdf8; margin-bottom: 20px; font-size: 24px; letter-spacing: 1px; }
