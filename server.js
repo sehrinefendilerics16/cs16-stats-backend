@@ -162,8 +162,9 @@ app.get("/", async (req, res) => {
       th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; }
       th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:13px; letter-spacing: 1px; }
       tr:hover td { background: rgba(56, 189, 248, 0.2) !important; }
+      tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
       
-      /* STICKY COLUMN FIX (KAYMAYI ÖNLEYEN KRİTİK ALAN) */
+      /* STICKY COLUMN FIX */
       .player-nick{ color:#38bdf8; font-weight:600; text-align: left; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
       
       .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; min-width: 50px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
@@ -185,6 +186,9 @@ app.get("/", async (req, res) => {
           box-shadow: 2px 0 5px rgba(0,0,0,0.5);
         }
         th:nth-child(2) { z-index: 100 !important; }
+        /* KATI ARKA PLAN - SAYDAMLAŞMAYI VE İÇ İÇE GEÇMEYİ ENGELLER */
+        tr:hover td:nth-child(2) { background: #1a243a !important; }
+        
         .pagination { flex-direction: column; width: 90%; margin: 20px auto; gap: 10px; }
       }
       </style></head><body>
