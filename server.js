@@ -13,9 +13,11 @@ const pool = new Pool({
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 let cache = {};
 const CACHE_LIMIT = 50;
-const ADMIN_KEY = process.env.ADMIN_KEY || "sehrinefendileri"; 
 
-// SENİN YÜKLEDİĞİN DOSYA ADINA GÖRE GÜNCELLEDİM
+// GÜVENLİK: Şifre Render'dan çekilecek.
+const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(20).toString('hex'); 
+
+// LOGO URL
 const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg?v=3";
 
 // ================= 1. RAM KORUMASI =================
@@ -104,7 +106,7 @@ async function fetchAndSave() {
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ (GERÇEK SIRALAMA VE LOGO) =================
+// ================= 4. ARAYÜZ (GERÇEK SIRALAMA) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
@@ -200,7 +202,7 @@ app.get("/", async (req, res) => {
   } catch (err) { res.status(500).send("Hata."); }
 });
 
-// ================= 5. YÖNETİM LİNKLERİ (LOGO DAHİL) =================
+// ================= 5. YÖNETİM LİNKLERİ =================
 const adminLayout = (title, message, subMessage) => `
   <html><head><meta charset="UTF-8"><title>${title}</title>
   <link rel="icon" href="${logoUrl}">
