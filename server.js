@@ -237,10 +237,10 @@ app.get("/", async (req, res) => {
         box-shadow:0 0 30px rgba(0,0,0,0.6);
         border: 1px solid #1e293b;
       }
-      table{width:100%;border-collapse:collapse;min-width:800px; table-layout: fixed;}
+      table{width:100%;border-collapse:collapse;min-width:700px; table-layout: fixed;}
       
-      th:nth-child(1), td:nth-child(1) { width: 60px; } 
-      th:nth-child(2), td:nth-child(2) { width: 220px; text-align: left; padding-left: 20px; } 
+      th:nth-child(1), td:nth-child(1) { width: 50px; } 
+      th:nth-child(2), td:nth-child(2) { width: 180px; text-align: left; padding-left: 15px; } 
       
       th{
         background:#020617;
@@ -261,7 +261,13 @@ app.get("/", async (req, res) => {
       tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
       tr:nth-child(odd) td { background: rgba(15, 23, 42, 0.2); }
 
-      .player-nick{color:#38bdf8;font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+      .player-nick{
+        color:#38bdf8;
+        font-weight:600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       
       tr:hover td{background:rgba(56,189,248,0.15) !important;}
       
@@ -287,16 +293,16 @@ app.get("/", async (req, res) => {
           background: #111a2e !important;
           border-right: none !important;
           box-shadow: 4px 0 8px rgba(0,0,0,0.9);
-          width: 50% !important; /* Mobilde Nick sütununa ferah alan veriyoruz */
-          min-width: 150px !important;
+          width: 40% !important; /* Nick sütununu daralttık */
+          min-width: 130px !important;
         }
         
-        /* İstatistik sütunlarını mobilde daraltıp rakamlara göre presliyoruz */
+        /* İstatistik sütunlarını mobilde dengeli şekilde genişletiyoruz */
         th:nth-child(n+3), td:nth-child(n+3) {
-          width: 65px !important; /* Rakamlar sığacak kadar daraltıldı */
-          padding: 8px 2px !important;
+          width: 80px !important; /* Rakamlar sığacak kadar genişlettik */
+          padding: 8px 5px !important;
           font-size: 13px !important;
-          text-align: center !important;
+          border: 1px solid rgba(56, 189, 248, 0.2); /* İnce dikey çizgiler geri geldi */
         }
 
         tr:nth-child(even) td:nth-child(2) { background: #1a243a !important; }
