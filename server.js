@@ -140,16 +140,19 @@ app.get("/", async (req, res) => {
       .info-box span { color: #facc15; font-weight: bold; font-size: 18px; }
       .update-badge { text-align: center; margin: 0 auto 30px; font-size: 15px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.3); }
       .update-badge b { color: #38bdf8; font-weight: 800; }
-      .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px;}
+      .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px; flex-wrap: wrap;}
       input{padding:14px;border-radius:6px;border:1px solid #334155;width:50%;background:#1e293b;color:white;outline:none;font-size:16px;}
       input::placeholder { color: rgba(255,255,255,0.4); font-style: italic; }
       button{padding:14px 30px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;font-size:16px;}
+      .reset-btn { 
+        padding: 14px 20px; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; 
+        color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; display: flex; align-items: center; justify-content: center;
+      }
       .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:10px 20px;border-radius:6px;border:1px solid #e1306c;}
       .table-container{ width:100%; overflow-x:auto; background:rgba(15, 23, 42, 0.95); border-radius:8px; border: 1px solid #1e293b; }
       table{width:100%; border-collapse:collapse; table-layout: fixed; min-width: 800px;}
       th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; transition: 0.2s; }
       th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:13px; letter-spacing: 1px; }
-      
       tr:hover td { background: rgba(56, 189, 248, 0.2) !important; color: #fff; }
       tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
       .player-nick{ color:#38bdf8; font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; text-align: left; }
@@ -158,6 +161,8 @@ app.get("/", async (req, res) => {
 
       @media (max-width: 768px) {
         .info-box { font-size: 13px; padding: 12px; } .info-box span { font-size: 14px; }
+        input { width: 100%; margin-bottom: 5px; }
+        button, .reset-btn { width: 100%; margin-bottom: 5px; }
         th:nth-child(2), td:nth-child(2) { position: sticky; left: 0; z-index: 10 !important; background: #111a2e !important; width: 130px !important; min-width: 130px !important; box-shadow: 4px 0 8px rgba(0,0,0,0.8); border-right: none; }
         tr:hover td:nth-child(2) { background: #1a243a !important; }
         .player-nick { width: 115px !important; }
@@ -172,7 +177,13 @@ app.get("/", async (req, res) => {
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
         <div class="info-box">⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.</div>
         <div class="update-badge">Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.</div>
-        <form class="search"><input name="search" placeholder="Nick giriniz..." value="${escapeHTML(search)}"><button type="submit">Ara</button></form>
+        
+        <form class="search" method="GET">
+          <input name="search" placeholder="Nick giriniz..." value="${escapeHTML(search)}">
+          <button type="submit">Ara</button>
+          ${search ? `<a href="/" class="reset-btn">↩ Tüm Listeye Dön</a>` : ''}
+        </form>
+
         <div class="table-container"><table><thead><tr><th>#</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr></thead><tbody>
         ${players.map((p) => {
           const kd = (p.total_kills / Math.max(p.total_deaths, 1));
