@@ -14,10 +14,7 @@ const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173
 let cache = {};
 const CACHE_LIMIT = 50;
 
-// GÜVENLİK: Şifre Render'dan çekilecek.
 const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(20).toString('hex'); 
-
-// LOGO URL
 const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg?v=3";
 
 // ================= 1. RAM KORUMASI =================
@@ -106,15 +103,13 @@ async function fetchAndSave() {
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ (100 OYUNCU VE SAYFALAMA) =================
+// ================= 4. ARAYÜZ (GELİŞTİRİLMİŞ) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
   const search = (req.query.search || "").toLowerCase();
-  
-  // SAYFALAMA AYARLARI
   const page = Math.max(1, parseInt(req.query.page) || 1);
-  const limit = 100; // HER SAYFADA TAM 100 OYUNCU
+  const limit = 100;
   const offset = (page - 1) * limit;
   const cacheKey = `${search}_p${page}_${isMobile}`;
 
@@ -136,8 +131,6 @@ app.get("/", async (req, res) => {
     const lastUpdateDate = logRes.rows[0]?.last_fetch ? new Date(logRes.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "---";
     const escapeHTML = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
     
-    const searchParam = search ? `&search=${encodeURIComponent(search)}` : "";
-
     let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>SEHRIN EFENDILERI</title>
       <link rel="icon" href="${logoUrl}">
@@ -154,52 +147,34 @@ app.get("/", async (req, res) => {
       .update-badge b { color: #38bdf8; font-weight: 800; }
       .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px; flex-wrap: wrap;}
       input{padding:14px;border-radius:6px;border:1px solid #334155;width:50%;background:#1e293b;color:white;outline:none;font-size:16px;}
-      input::placeholder { color: rgba(255,255,255,0.4); font-style: italic; }
       button{padding:14px 30px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;font-size:16px;}
-      .reset-btn { 
-        padding: 14px 20px; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; 
-        color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; display: flex; align-items: center; justify-content: center;
-      }
+      .reset-btn { padding: 14px 20px; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; display: flex; align-items: center; justify-content: center; }
       .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:10px 20px;border-radius:6px;border:1px solid #e1306c;}
       .table-container{ width:100%; overflow-x:auto; background:rgba(15, 23, 42, 0.95); border-radius:8px; border: 1px solid #1e293b; }
       table{width:100%; border-collapse:collapse; table-layout: fixed; min-width: 800px;}
-      th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; transition: 0.2s; }
+      th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; }
       th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:13px; letter-spacing: 1px; }
-      tr:hover td { background: rgba(56, 189, 248, 0.2) !important; color: #fff; }
-      tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
-      .player-nick{ color:#38bdf8; font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; text-align: left; }
-      .kd-high { color: #00ff00 !important; font-weight: bold; }
-      .kd-low { color: #ff4500 !important; }
-
-      /* MADALYA BUTONLARI CSS */
+      tr:hover td { background: rgba(56, 189, 248, 0.2) !important; }
+      .player-nick{ color:#38bdf8; font-weight:600; text-align: left; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      
+      /* ROZET STİLLERİ */
       .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; min-width: 50px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
-      .rank-1 { background: linear-gradient(135deg, #facc15, #eab308); color: #422006; box-shadow: 0 0 12px rgba(250, 204, 21, 0.5); border: 1px solid #fef08a; }
-      .rank-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #0f172a; box-shadow: 0 0 12px rgba(226, 232, 240, 0.5); border: 1px solid #f8fafc; }
-      .rank-3 { background: linear-gradient(135deg, #fdba74, #ea580c); color: #431407; box-shadow: 0 0 12px rgba(234, 88, 12, 0.5); border: 1px solid #fed7aa; }
-
-      /* SAYFALAMA (PAGINATION) CSS */
+      .rank-1 { background: linear-gradient(135deg, #facc15, #eab308); color: #422006; border: 1px solid #fef08a; }
+      .rank-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #0f172a; border: 1px solid #f8fafc; }
+      .rank-3 { background: linear-gradient(135deg, #fdba74, #ea580c); color: #431407; border: 1px solid #fed7aa; }
+      
+      /* SAYFALAMA STİLİ */
       .pagination { display: flex; justify-content: center; gap: 15px; margin: 30px 0; align-items: center; }
-      .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; transition: 0.3s; font-size: 15px; }
-      .pagination a:hover { background: #38bdf8; color: white; transform: translateY(-2px); }
-      .pagination span { background: #020617; border: 1px solid #1e293b; color: white; padding: 12px 25px; border-radius: 6px; font-weight: bold; font-size: 15px; }
+      .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; }
+      .pagination span { background: #020617; border: 1px solid #1e293b; color: white; padding: 12px 25px; border-radius: 6px; font-weight: bold; }
 
       @media (max-width: 768px) {
-        .info-box { font-size: 13px; padding: 12px; } .info-box span { font-size: 14px; }
-        input { width: 100%; margin-bottom: 5px; }
-        button, .reset-btn { width: 100%; margin-bottom: 5px; }
-        th:nth-child(2), td:nth-child(2) { position: sticky; left: 0; z-index: 10 !important; background: #111a2e !important; width: 130px !important; min-width: 130px !important; box-shadow: 4px 0 8px rgba(0,0,0,0.8); border-right: none; }
-        tr:hover td:nth-child(2) { background: #1a243a !important; }
-        .player-nick { width: 115px !important; }
-        th:nth-child(n+3), td:nth-child(n+3) { width: 95px !important; min-width: 95px !important; }
-        th:nth-child(1), td:nth-child(1) { width: 60px !important; min-width: 60px !important; }
-        th:nth-child(2) { z-index: 11 !important; background: #020617 !important; }
-        .pagination { flex-direction: column; gap: 10px; width: 90%; margin: 20px auto; }
-        .pagination a, .pagination span { width: 100%; text-align: center; }
+        th:nth-child(2), td:nth-child(2) { position: sticky; left: 0; z-index: 10; background: #111a2e !important; width: 130px !important; }
+        .pagination { flex-direction: column; width: 90%; margin: 20px auto; }
       }
     </style></head><body>
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
       <div class="content-wrapper">
-        <div class="mobile-tip">💡 <b>İpucu:</b> Tüm istatistikleri daha geniş görmek için tarayıcı ayarlarınızdan <b>"Masaüstü sitesi"</b> özelliğini aktif edebilirsiniz.</div>
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
         <div class="info-box">⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.</div>
         <div class="update-badge">Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.</div>
@@ -213,59 +188,41 @@ app.get("/", async (req, res) => {
         <div class="table-container"><table><thead><tr><th>#</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr></thead><tbody>
         ${players.map((p) => {
           const kd = (p.total_kills / Math.max(p.total_deaths, 1));
-          
-          // MADALYA MANTIĞI (ALTIN, GÜMÜŞ, BRONZ)
           const r = parseInt(p.real_rank);
           let rankDisplay = `<b>${r}</b>`;
           if (r === 1) rankDisplay = `<span class="rank-badge rank-1">🥇 1</span>`;
           else if (r === 2) rankDisplay = `<span class="rank-badge rank-2">🥈 2</span>`;
           else if (r === 3) rankDisplay = `<span class="rank-badge rank-3">🥉 3</span>`;
 
-          return `<tr><td>${rankDisplay}</td><td><span class="player-nick">${escapeHTML(p.nick)}</span></td><td>${p.total_kills}</td><td>${p.total_deaths}</td><td class="${kd >= 2.0 ? 'kd-high' : (kd < 1.0 ? 'kd-low' : '')}">${kd.toFixed(2)}</td><td>${p.total_damage}</td><td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td></tr>`;
+          return `<tr><td>${rankDisplay}</td><td><span class="player-nick">${escapeHTML(p.nick)}</span></td><td>${p.total_kills}</td><td>${p.total_deaths}</td><td>${kd.toFixed(2)}</td><td>${p.total_damage}</td><td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td></tr>`;
         }).join('')}
         </tbody></table></div>
         
         <div class="pagination">
-          ${page > 1 ? `<a href="/?page=${page - 1}${searchParam}">« Önceki Sayfa</a>` : ''}
+          ${page > 1 ? `<a href="/?page=${page - 1}${search ? '&search='+search : ''}">« Önceki Sayfa</a>` : ''}
           <span>Sayfa ${page}</span>
-          ${players.length === limit ? `<a href="/?page=${page + 1}${searchParam}">Sonraki Sayfa »</a>` : ''}
+          ${players.length === limit ? `<a href="/?page=${page + 1}${search ? '&search='+search : ''}">Sonraki Sayfa »</a>` : ''}
         </div>
-
       </div></body></html>`;
     cache[cacheKey] = { data: html, time: Date.now() }; res.send(html);
   } catch (err) { res.status(500).send("Hata."); }
 });
 
 // ================= 5. YÖNETİM LİNKLERİ =================
-const adminLayout = (title, message, subMessage) => `
-  <html><head><meta charset="UTF-8"><title>${title}</title>
-  <link rel="icon" href="${logoUrl}">
-  <style>
-    body{ background: #020617; color:white; font-family:'Segoe UI',sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
-    .card{ background: rgba(15, 23, 42, 0.95); border: 1px solid #38bdf8; padding: 40px; border-radius: 12px; text-align: center; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); max-width: 500px; }
-    h1{ color: #38bdf8; margin-bottom: 20px; font-size: 24px; letter-spacing: 1px; }
-    p{ font-size: 18px; margin: 10px 0; color: #e2e8f0; }
-    .sub{ font-size: 14px; color: #94a3b8; margin-top: 20px; border-top: 1px solid #1e293b; padding-top: 20px; }
-  </style></head><body>
-    <div class="card"><h1>${title}</h1><p>${message}</p><div class="sub">${subMessage}</div></div>
-  </body></html>`;
-
 app.get("/status", async (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   try {
     const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
-    const formatted = r.rows[0]?.last_fetch ? new Date(r.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "Veri yok";
-    res.send(adminLayout("📊 SİSTEM DURUMU", "🛡️ Sistem Aktif ve Kayıtta.", `Son Veri Çekimi: <b>${formatted}</b>`));
+    res.send(`📊 Sistem Aktif. Son Çekim: ${r.rows[0]?.last_fetch}`);
   } catch (e) { res.status(500).send("Hata"); }
 });
 
 app.get("/force-update", async (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   await fetchAndSave();
-  res.send(adminLayout("⚙️ İŞLEM BAŞARILI", "✅ Manuel Güncelleme Tetiklendi.", "Veritabanı OyunYöneticisi ile senkronize edildi."));
+  res.send("✅ Güncellendi.");
 });
 
-// ================= 6. STARTUP =================
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
   app.listen(PORT, () => {
