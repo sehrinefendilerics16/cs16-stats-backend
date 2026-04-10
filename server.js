@@ -101,7 +101,7 @@ async function fetchAndSave() {
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ TASARIMI =================
+// ================= 4. ARAYÜZ (GERÇEK SIRALAMA VE PARLAMA EFEKTİ) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
@@ -183,20 +183,31 @@ app.get("/", async (req, res) => {
   } catch (err) { res.status(500).send("Hata."); }
 });
 
-// ================= 5. YÖNETİM LİNKLERİ (KRİTİK DÜZELTME) =================
+// ================= 5. YÖNETİM LİNKLERİ (EFECTİF VE PROFESYONEL TASARIM) =================
+const adminLayout = (title, message, subMessage) => `
+  <html><head><meta charset="UTF-8"><title>${title}</title><style>
+    body{ background: #020617; color:white; font-family:'Segoe UI',sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+    .card{ background: rgba(15, 23, 42, 0.95); border: 1px solid #38bdf8; padding: 40px; border-radius: 12px; text-align: center; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); max-width: 500px; }
+    h1{ color: #38bdf8; margin-bottom: 20px; font-size: 24px; letter-spacing: 1px; }
+    p{ font-size: 18px; margin: 10px 0; color: #e2e8f0; }
+    .sub{ font-size: 14px; color: #94a3b8; margin-top: 20px; border-top: 1px solid #1e293b; padding-top: 20px; }
+  </style></head><body>
+    <div class="card"><h1>${title}</h1><p>${message}</p><div class="sub">${subMessage}</div></div>
+  </body></html>`;
+
 app.get("/status", async (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   try {
     const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const formatted = r.rows[0]?.last_fetch ? new Date(r.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "Veri yok";
-    res.send(`Sistem Aktif. Son Veri: ${formatted}`);
+    res.send(adminLayout("📊 SİSTEM DURUMU", "🛡️ Sistem Aktif ve Kayıtta.", `Son Veri Çekimi: <b>${formatted}</b>`));
   } catch (e) { res.status(500).send("Hata"); }
 });
 
 app.get("/force-update", async (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   await fetchAndSave();
-  res.send("Manuel Güncelleme Tetiklendi.");
+  res.send(adminLayout("⚙️ İŞLEM BAŞARILI", "✅ Manuel Güncelleme Tetiklendi.", "Veritabanı OyunYöneticisi ile senkronize edildi."));
 });
 
 // ================= 6. STARTUP =================
