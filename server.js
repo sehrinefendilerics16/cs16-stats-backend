@@ -3,6 +3,7 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const crypto = require("crypto");
 const { Pool } = require("pg");
+const nodemailer = require("nodemailer");
 
 const app = express();
 const pool = new Pool({
@@ -10,23 +11,39 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// ================= 1. OTOMATİK MAİL SİSTEMİ =================
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "leventistemi@gmail.com",
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+const sendAlertMail = async (errorMsg) => {
+  const mailOptions = {
+    from: '"Şehrin Efendileri Sistem" <leventistemi@gmail.com>',
+    to: "leventistemi@gmail.com",
+    subject: "⚠️ SİSTEM ARIZA BİLDİRİMİ - SEHRIN EFENDILERI",
+    text: `Merhaba Levent, sistemde bir hata oluştu.\n\nHata Detayı: ${errorMsg}\n\nZaman: ${new Date().toLocaleString("tr-TR", {timeZone: "Europe/Istanbul"})}`
+  };
+  try { 
+    await transporter.sendMail(mailOptions); 
+    console.log("📧 Arıza maili başarıyla gönderildi.");
+  } catch (e) { 
+    console.error("Mail gönderme hatası:", e.message); 
+  }
+};
+
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
 let cache = {};
 const CACHE_LIMIT = 50;
-
 const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(20).toString('hex'); 
 const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg?v=3";
 
-// TÜRKİYE TARİH VE SAAT FONKSİYONU
-const getTRDate = (date = new Date()) => {
-  return date.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
-};
-
 function cleanCache() {
   const now = Date.now();
-  for (const key in cache) {
-    if (now - cache[key].time > 30000) delete cache[key];
-  }
+  for (const key in cache) { if (now - cache[key].time > 30000) delete cache[key]; }
   if (Object.keys(cache).length > CACHE_LIMIT) cache = {}; 
 }
 
@@ -79,7 +96,7 @@ async function fetchAndSave() {
   const client = await pool.connect();
   try {
     const players = await fetchPlayers();
-    if (!players || players.length < 5) throw new Error("Yetersiz Veri");
+    if (!players || players.length < 5) throw new Error("Veri Çekilemedi veya Yetersiz Veri");
     const sortedPlayers = [...players].sort((a, b) => a.nick.localeCompare(b.nick));
     const newHash = crypto.createHash("md5").update(JSON.stringify(sortedPlayers)).digest("hex");
     const lastHashRes = await client.query(`SELECT id, last_hash FROM system_log ORDER BY id DESC LIMIT 1`);
@@ -101,11 +118,16 @@ async function fetchAndSave() {
     await client.query(`INSERT INTO system_log (last_fetch, last_hash) VALUES (CURRENT_TIMESTAMP, $1)`, [newHash]);
     await client.query('COMMIT');
     cache = {}; 
-  } catch (err) { if (client) await client.query('ROLLBACK'); console.error("Motor Hatası:", err.message); } 
+  } catch (err) { 
+    if (client) await client.query('ROLLBACK'); 
+    console.error("Motor Hatası:", err.message);
+    // KRİTİK HATA DURUMUNDA MAİL GÖNDER
+    sendAlertMail(err.message); 
+  } 
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ =================
+// ================= 2. ARAYÜZ (ANALYTICS DAHİL) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
@@ -146,7 +168,6 @@ app.get("/", async (req, res) => {
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
-
         gtag('config', 'G-EGWK9NSWZ2');
       </script>
       <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -172,32 +193,18 @@ app.get("/", async (req, res) => {
       th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:13px; letter-spacing: 1px; }
       tr:hover td { background: rgba(56, 189, 248, 0.2) !important; }
       tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
-      
-      /* STICKY COLUMN FIX */
       .player-nick{ color:#38bdf8; font-weight:600; text-align: left; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
-      
       .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; min-width: 50px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
       .rank-1 { background: linear-gradient(135deg, #facc15, #eab308); color: #422006; border: 1px solid #fef08a; }
       .rank-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #0f172a; border: 1px solid #f8fafc; }
       .rank-3 { background: linear-gradient(135deg, #fdba74, #ea580c); color: #431407; border: 1px solid #fed7aa; }
-      
       .pagination { display: flex; justify-content: center; gap: 15px; margin: 30px 0; align-items: center; }
       .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; }
       .pagination span { background: #020617; border: 1px solid #1e293b; color: white; padding: 12px 25px; border-radius: 6px; font-weight: bold; }
-
       @media (max-width: 768px) {
-        th:nth-child(2), td:nth-child(2) { 
-          position: sticky !important; 
-          left: 0 !important; 
-          z-index: 99 !important; 
-          background: #0f172a !important; 
-          width: 130px !important;
-          box-shadow: 2px 0 5px rgba(0,0,0,0.5);
-        }
+        th:nth-child(2), td:nth-child(2) { position: sticky !important; left: 0 !important; z-index: 99 !important; background: #0f172a !important; width: 130px !important; box-shadow: 2px 0 5px rgba(0,0,0,0.5); }
         th:nth-child(2) { z-index: 100 !important; }
-        /* KATI ARKA PLAN - SAYDAMLAŞMAYI VE İÇ İÇE GEÇMEYİ ENGELLER */
         tr:hover td:nth-child(2) { background: #1a243a !important; }
-        
         .pagination { flex-direction: column; width: 90%; margin: 20px auto; gap: 10px; }
       }
       </style></head><body>
@@ -232,7 +239,7 @@ app.get("/", async (req, res) => {
   } catch (err) { res.status(500).send("Hata."); }
 });
 
-// ================= 5. YÖNETİM LİNKLERİ (HAVALI SİYAH TASARIM) =================
+// ================= 3. YÖNETİM LİNKLERİ =================
 const adminLayout = (title, message, subMessage) => `
   <html><head><meta charset="UTF-8"><title>${title}</title>
   <link rel="icon" href="${logoUrl}">
