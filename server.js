@@ -88,11 +88,10 @@ async function fetchAndSave() {
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ (WEB GÖRÜNÜRLÜK GÜNCELLEMESİ) =================
+// ================= 4. ARAYÜZ (GERÇEK SIRALAMA VE PARLAMA EFEKTİ) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
-  
   const search = (req.query.search || "").toLowerCase();
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = 100;
@@ -102,12 +101,23 @@ app.get("/", async (req, res) => {
   if (cache[cacheKey] && Date.now() - cache[cacheKey].time < 30000) return res.send(cache[cacheKey].data);
 
   try {
+    // GERÇEK SIRALAMAYI HESAPLAYAN KRİTİK SORGU
     const query = `
-      WITH ranked_players AS (
-        SELECT *, (total_kills - total_deaths) as net_kills, (total_kills::float / GREATEST(total_deaths, 1)) as kd FROM players WHERE LOWER(nick) LIKE $1
+      WITH all_ranked AS (
+        SELECT *,
+          (total_kills - total_deaths) as net_kills,
+          (total_kills::float / GREATEST(total_deaths, 1)) as kd,
+          RANK() OVER (ORDER BY ( ( (total_kills - total_deaths) * 1.0) + ( (total_kills::float / GREATEST(total_deaths, 1)) * 5.0) + (hs_percent * 1.5) + (total_damage / 1000.0) ) DESC) as real_rank
+        FROM players
       )
-      SELECT *, ( (net_kills * 1.0) + (kd * 5.0) + (hs_percent * 1.5) + (total_damage / 1000.0) ) as score FROM ranked_players ORDER BY score DESC LIMIT $2 OFFSET $3
+      SELECT *,
+        ( (net_kills * 1.0) + (kd * 5.0) + (hs_percent * 1.5) + (total_damage / 1000.0) ) as score
+      FROM all_ranked
+      WHERE LOWER(nick) LIKE $1
+      ORDER BY score DESC
+      LIMIT $2 OFFSET $3
     `;
+    
     const countRes = await pool.query(`SELECT COUNT(*) FROM players WHERE LOWER(nick) LIKE $1`, [`%${search}%`]);
     const logRes = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const result = await pool.query(query, [`%${search}%`, limit, offset]);
@@ -129,35 +139,27 @@ app.get("/", async (req, res) => {
       }
 
       .content-wrapper{width:98%;max-width:1400px;margin:0 auto;}
-      
-      /* BÜYÜTÜLEN BİLGİ KUTULARI (WEB ODAKLI) */
-      .info-box{ 
-        text-align:center; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); padding: 18px; margin: 20px auto; max-width: 1200px; border-radius: 10px; 
-        font-size: 16px; /* Web'de büyütüldü */
-        line-height: 1.5;
-      }
+      .info-box{ text-align:center; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); padding: 18px; margin: 20px auto; max-width: 1200px; border-radius: 10px; font-size: 16px; }
       .info-box span { color: #facc15; font-weight: bold; font-size: 18px; }
-      
-      .update-badge { 
-        text-align: center; margin: 0 auto 30px; font-size: 15px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.3); 
-        box-shadow: 0 0 15px rgba(0,0,0,0.3);
-      }
+      .update-badge { text-align: center; margin: 0 auto 30px; font-size: 15px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.3); }
       .update-badge b { color: #38bdf8; font-weight: 800; }
 
       .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px;}
       input{padding:14px;border-radius:6px;border:1px solid #334155;width:50%;background:#1e293b;color:white;outline:none;font-size:16px;}
       input::placeholder { color: rgba(255,255,255,0.4); font-style: italic; }
       button,.nav-btn{padding:14px 30px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;font-size:16px;}
-      
       .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:10px 20px;border-radius:6px;border:1px solid #e1306c;}
       
       .table-container{ width:100%; overflow-x:auto; background:rgba(15, 23, 42, 0.95); border-radius:8px; border: 1px solid #1e293b; -webkit-overflow-scrolling: touch; }
       table{width:100%; border-collapse:collapse; table-layout: fixed; min-width: 800px;}
-      th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; }
+      th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; transition: 0.2s; }
       th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:13px; letter-spacing: 1px; }
-      tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
-      .player-nick{ color:#38bdf8; font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; text-align: left; }
       
+      /* PARLAMA EFEKTİ (HOVER) */
+      tr:hover td { background: rgba(56, 189, 248, 0.2) !important; color: #fff; }
+      tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
+
+      .player-nick{ color:#38bdf8; font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; text-align: left; }
       .kd-high { color: #00ff00 !important; font-weight: bold; }
       .kd-low { color: #ff4500 !important; }
 
@@ -165,49 +167,36 @@ app.get("/", async (req, res) => {
         .info-box { font-size: 13px; padding: 12px; }
         .info-box span { font-size: 14px; }
         .update-badge { font-size: 13px; padding: 6px 15px; }
-        input { width: 65%; font-size: 14px; }
-        button { padding: 12px 20px; font-size: 14px; }
+        input { width: 65%; }
         
         th:nth-child(2), td:nth-child(2) {
           position: sticky; left: 0; z-index: 10 !important;
           background: #111a2e !important; width: 130px !important; min-width: 130px !important;
           box-shadow: 4px 0 8px rgba(0,0,0,0.8);
         }
+        /* MOBİLDE HOVER DURUMUNDA NİCK SÜTUNUNU DA AYDINLAT */
+        tr:hover td:nth-child(2) { background: #1a243a !important; }
         .player-nick { width: 115px !important; }
         th:nth-child(n+3), td:nth-child(n+3) { width: 95px !important; min-width: 95px !important; }
         th:nth-child(1), td:nth-child(1) { width: 40px !important; min-width: 40px !important; }
+        th:nth-child(2) { z-index: 11 !important; background: #020617 !important; }
       }
     </style></head><body>
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
-      
       <div class="content-wrapper">
-        <div class="mobile-tip">
-          💡 <b>İpucu:</b> Tüm istatistikleri daha geniş görmek için tarayıcı ayarlarınızdan <b>"Masaüstü sitesi"</b> özelliğini aktif edebilirsiniz.
-        </div>
-
+        <div class="mobile-tip">💡 <b>İpucu:</b> Tüm istatistikleri daha geniş görmek için tarayıcı ayarlarınızdan <b>"Masaüstü sitesi"</b> özelliğini aktif edebilirsiniz.</div>
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
-        
-        <div class="info-box">
-          ⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.
-        </div>
-        
-        <div class="update-badge">
-          Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.
-        </div>
-        
-        <form class="search">
-          <input name="search" placeholder="Nick giriniz..." value="${escapeHTML(search)}">
-          <button type="submit">Ara</button>
-        </form>
-
+        <div class="info-box">⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.</div>
+        <div class="update-badge">Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.</div>
+        <form class="search"><input name="search" placeholder="Nick giriniz..." value="${escapeHTML(search)}"><button type="submit">Ara</button></form>
         <div class="table-container">
           <table>
             <thead><tr><th>#</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr></thead>
             <tbody>
-              ${players.map((p, i) => {
+              ${players.map((p) => {
                 const kd = (p.total_kills / Math.max(p.total_deaths, 1));
                 return `<tr>
-                  <td>${offset + i + 1}</td>
+                  <td><b>${p.real_rank}</b></td>
                   <td><span class="player-nick">${escapeHTML(p.nick)}</span></td>
                   <td>${p.total_kills}</td><td>${p.total_deaths}</td>
                   <td class="${kd >= 2.0 ? 'kd-high' : (kd < 1.0 ? 'kd-low' : '')}">${kd.toFixed(2)}</td>
