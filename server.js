@@ -15,8 +15,8 @@ let cache = {};
 const CACHE_LIMIT = 50;
 const ADMIN_KEY = process.env.ADMIN_KEY || "sehrinefendileri"; 
 
-// SUNUCU LOGO URL (FAVICON İÇİN)
-const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/image_44db98.png";
+// SENİN YÜKLEDİĞİN DOSYA ADINA GÖRE GÜNCELLEDİM
+const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg?v=3";
 
 // ================= 1. RAM KORUMASI =================
 function cleanCache() {
@@ -104,7 +104,7 @@ async function fetchAndSave() {
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ (GERÇEK SIRALAMA VE PARLAMA EFEKTİ) =================
+// ================= 4. ARAYÜZ (GERÇEK SIRALAMA VE LOGO) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
@@ -134,9 +134,9 @@ app.get("/", async (req, res) => {
     
     let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>SEHRIN EFENDILERI</title>
-      <link rel="icon" href="${logoUrl}" type="image/png">
+      <link rel="icon" href="${logoUrl}">
       <style>
-      body{ background: linear-gradient(rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.75)), url('https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg') no-repeat center center fixed; background-size: cover; color:white; font-family:'Segoe UI',sans-serif; margin:0; padding-bottom:50px; overflow-x:hidden; }
+      body{ background: linear-gradient(rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.75)), url('${logoUrl}') no-repeat center center fixed; background-size: cover; color:white; font-family:'Segoe UI',sans-serif; margin:0; padding-bottom:50px; overflow-x:hidden; }
       .header-container{text-align:center;padding:30px 10px;background:rgba(2, 6, 23, 0.85);}
       .main-title{font-size:clamp(22px,5vw,42px);font-weight:900;letter-spacing:2px;margin:0;text-shadow:0 0 15px rgba(56,189,248,0.5);}
       .ip-title{color:#38bdf8;font-size:clamp(16px,3vw,26px);margin:5px 0;}
@@ -200,10 +200,10 @@ app.get("/", async (req, res) => {
   } catch (err) { res.status(500).send("Hata."); }
 });
 
-// ================= 5. YÖNETİM LİNKLERİ (EFECTİF VE PROFESYONEL TASARIM) =================
+// ================= 5. YÖNETİM LİNKLERİ (LOGO DAHİL) =================
 const adminLayout = (title, message, subMessage) => `
   <html><head><meta charset="UTF-8"><title>${title}</title>
-  <link rel="icon" href="${logoUrl}" type="image/png">
+  <link rel="icon" href="${logoUrl}">
   <style>
     body{ background: #020617; color:white; font-family:'Segoe UI',sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
     .card{ background: rgba(15, 23, 42, 0.95); border: 1px solid #38bdf8; padding: 40px; border-radius: 12px; text-align: center; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); max-width: 500px; }
