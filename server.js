@@ -17,7 +17,11 @@ const CACHE_LIMIT = 50;
 const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(20).toString('hex'); 
 const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg?v=3";
 
-// ================= 1. RAM KORUMASI =================
+// TÜRKİYE TARİH VE SAAT FONKSİYONU
+const getTRDate = (date = new Date()) => {
+  return date.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
+};
+
 function cleanCache() {
   const now = Date.now();
   for (const key in cache) {
@@ -26,7 +30,6 @@ function cleanCache() {
   if (Object.keys(cache).length > CACHE_LIMIT) cache = {}; 
 }
 
-// ================= 2. VERİTABANI BAŞLATMA =================
 async function initDB() {
   const client = await pool.connect();
   try {
@@ -45,7 +48,6 @@ async function initDB() {
   } finally { client.release(); }
 }
 
-// ================= 3. MOTOR VE SCRAPER =================
 let isRunning = false;
 async function fetchPlayers(retry = 2) {
   try {
@@ -103,7 +105,7 @@ async function fetchAndSave() {
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ (GELİŞTİRİLMİŞ) =================
+// ================= 4. ARAYÜZ =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
@@ -116,6 +118,11 @@ app.get("/", async (req, res) => {
   if (cache[cacheKey] && Date.now() - cache[cacheKey].time < 30000) return res.send(cache[cacheKey].data);
 
   try {
+    // TOPLAM OYUNCU SAYISINI AL
+    const totalRes = await pool.query(`SELECT COUNT(*) FROM players WHERE LOWER(nick) LIKE $1`, [`%${search}%`]);
+    const totalPlayers = parseInt(totalRes.rows[0].count);
+    const totalPages = Math.ceil(totalPlayers / limit) || 1;
+
     const query = `
       WITH all_ranked AS (
         SELECT *, (total_kills - total_deaths) as net_kills, (total_kills::float / GREATEST(total_deaths, 1)) as kd,
@@ -128,7 +135,11 @@ app.get("/", async (req, res) => {
     const logRes = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const result = await pool.query(query, [`%${search}%`, limit, offset]);
     const players = result.rows;
-    const lastUpdateDate = logRes.rows[0]?.last_fetch ? new Date(logRes.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }) : "---";
+    
+    // TARİH FORMATLAMA (10.04.2026 21:52)
+    const rawDate = logRes.rows[0]?.last_fetch;
+    const lastUpdateDate = rawDate ? new Date(rawDate).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(/\//g, ".") : "---";
+    
     const escapeHTML = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
     
     let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -139,8 +150,8 @@ app.get("/", async (req, res) => {
       .header-container{text-align:center;padding:30px 10px;background:rgba(2, 6, 23, 0.85);}
       .main-title{font-size:clamp(22px,5vw,42px);font-weight:900;letter-spacing:2px;margin:0;text-shadow:0 0 15px rgba(56,189,248,0.5);}
       .ip-title{color:#38bdf8;font-size:clamp(16px,3vw,26px);margin:5px 0;}
-      .mobile-tip { background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; padding: 12px; margin: 10px auto; border-radius: 8px; font-size: 14px; color: #e2e8f0; text-align: center; max-width:1200px; display: ${isMobile ? 'block' : 'none'}; }
       .content-wrapper{width:98%;max-width:1400px;margin:0 auto;}
+      .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:10px 20px;border-radius:6px;border:1px solid #e1306c;}
       .info-box{ text-align:center; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); padding: 18px; margin: 20px auto; max-width: 1200px; border-radius: 10px; font-size: 16px; }
       .info-box span { color: #facc15; font-weight: bold; font-size: 18px; }
       .update-badge { text-align: center; margin: 0 auto 30px; font-size: 15px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.3); }
@@ -148,8 +159,7 @@ app.get("/", async (req, res) => {
       .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px; flex-wrap: wrap;}
       input{padding:14px;border-radius:6px;border:1px solid #334155;width:50%;background:#1e293b;color:white;outline:none;font-size:16px;}
       button{padding:14px 30px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;font-size:16px;}
-      .reset-btn { padding: 14px 20px; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; display: flex; align-items: center; justify-content: center; }
-      .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:10px 20px;border-radius:6px;border:1px solid #e1306c;}
+      .reset-btn { padding: 14px 20px; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; }
       .table-container{ width:100%; overflow-x:auto; background:rgba(15, 23, 42, 0.95); border-radius:8px; border: 1px solid #1e293b; }
       table{width:100%; border-collapse:collapse; table-layout: fixed; min-width: 800px;}
       th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; }
@@ -157,34 +167,31 @@ app.get("/", async (req, res) => {
       tr:hover td { background: rgba(56, 189, 248, 0.2) !important; }
       .player-nick{ color:#38bdf8; font-weight:600; text-align: left; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       
-      /* ROZET STİLLERİ */
       .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; min-width: 50px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
       .rank-1 { background: linear-gradient(135deg, #facc15, #eab308); color: #422006; border: 1px solid #fef08a; }
       .rank-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #0f172a; border: 1px solid #f8fafc; }
       .rank-3 { background: linear-gradient(135deg, #fdba74, #ea580c); color: #431407; border: 1px solid #fed7aa; }
       
-      /* SAYFALAMA STİLİ */
       .pagination { display: flex; justify-content: center; gap: 15px; margin: 30px 0; align-items: center; }
-      .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; }
+      .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; transition: 0.3s; }
+      .pagination a:hover { background: #38bdf8; color: white; }
       .pagination span { background: #020617; border: 1px solid #1e293b; color: white; padding: 12px 25px; border-radius: 6px; font-weight: bold; }
 
       @media (max-width: 768px) {
         th:nth-child(2), td:nth-child(2) { position: sticky; left: 0; z-index: 10; background: #111a2e !important; width: 130px !important; }
-        .pagination { flex-direction: column; width: 90%; margin: 20px auto; }
+        .pagination { flex-direction: column; width: 90%; margin: 20px auto; gap: 10px; }
       }
-    </style></head><body>
+      </style></head><body>
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
       <div class="content-wrapper">
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
         <div class="info-box">⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.</div>
         <div class="update-badge">Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.</div>
-        
         <form class="search" method="GET">
           <input name="search" placeholder="Nick giriniz..." value="${escapeHTML(search)}">
           <button type="submit">Ara</button>
           ${search ? `<a href="/" class="reset-btn">↩ Tüm Listeye Dön</a>` : ''}
         </form>
-
         <div class="table-container"><table><thead><tr><th>#</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr></thead><tbody>
         ${players.map((p) => {
           const kd = (p.total_kills / Math.max(p.total_deaths, 1));
@@ -193,34 +200,47 @@ app.get("/", async (req, res) => {
           if (r === 1) rankDisplay = `<span class="rank-badge rank-1">🥇 1</span>`;
           else if (r === 2) rankDisplay = `<span class="rank-badge rank-2">🥈 2</span>`;
           else if (r === 3) rankDisplay = `<span class="rank-badge rank-3">🥉 3</span>`;
-
           return `<tr><td>${rankDisplay}</td><td><span class="player-nick">${escapeHTML(p.nick)}</span></td><td>${p.total_kills}</td><td>${p.total_deaths}</td><td>${kd.toFixed(2)}</td><td>${p.total_damage}</td><td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td></tr>`;
         }).join('')}
         </tbody></table></div>
-        
         <div class="pagination">
           ${page > 1 ? `<a href="/?page=${page - 1}${search ? '&search='+search : ''}">« Önceki Sayfa</a>` : ''}
-          <span>Sayfa ${page}</span>
-          ${players.length === limit ? `<a href="/?page=${page + 1}${search ? '&search='+search : ''}">Sonraki Sayfa »</a>` : ''}
+          <span>Sayfa ${page} / ${totalPages}</span>
+          ${page < totalPages ? `<a href="/?page=${page + 1}${search ? '&search='+search : ''}">Sonraki Sayfa »</a>` : ''}
         </div>
       </div></body></html>`;
     cache[cacheKey] = { data: html, time: Date.now() }; res.send(html);
   } catch (err) { res.status(500).send("Hata."); }
 });
 
-// ================= 5. YÖNETİM LİNKLERİ =================
+// ================= 5. YÖNETİM LİNKLERİ (HAVALI SİYAH TASARIM) =================
+const adminLayout = (title, message, subMessage) => `
+  <html><head><meta charset="UTF-8"><title>${title}</title>
+  <link rel="icon" href="${logoUrl}">
+  <style>
+    body{ background: #020617; color:white; font-family:'Segoe UI',sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+    .card{ background: rgba(15, 23, 42, 0.95); border: 1px solid #38bdf8; padding: 40px; border-radius: 12px; text-align: center; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); max-width: 500px; }
+    h1{ color: #38bdf8; margin-bottom: 20px; font-size: 24px; letter-spacing: 1px; }
+    p{ font-size: 18px; margin: 10px 0; color: #e2e8f0; }
+    .sub{ font-size: 14px; color: #94a3b8; margin-top: 20px; border-top: 1px solid #1e293b; padding-top: 20px; }
+    .sub b { color: #38bdf8; }
+  </style></head><body>
+    <div class="card"><h1>${title}</h1><p>${message}</p><div class="sub">${subMessage}</div></div>
+  </body></html>`;
+
 app.get("/status", async (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   try {
     const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
-    res.send(`📊 Sistem Aktif. Son Çekim: ${r.rows[0]?.last_fetch}`);
+    const trDate = r.rows[0]?.last_fetch ? new Date(r.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(/\//g, ".") : "Veri yok";
+    res.send(adminLayout("📊 SİSTEM DURUMU", "🛡️ Sistem Aktif ve Kayıtta.", `Son Veri Çekimi: <b>${trDate}</b>`));
   } catch (e) { res.status(500).send("Hata"); }
 });
 
 app.get("/force-update", async (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   await fetchAndSave();
-  res.send("✅ Güncellendi.");
+  res.send(adminLayout("⚙️ İŞLEM BAŞARILI", "✅ Manuel Güncelleme Tetiklendi.", "Veritabanı OyunYöneticisi ile senkronize edildi."));
 });
 
 const PORT = process.env.PORT || 3000;
