@@ -167,11 +167,11 @@ app.get("/", async (req, res) => {
       .kd-high { color: #00ff00 !important; font-weight: bold; }
       .kd-low { color: #ff4500 !important; }
 
-      /* MADALYA BUTONLARI CSS */
-      .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
+      /* MADALYA BUTONLARI CSS (BRONZ EKLENDİ, TİPLER EŞİTLENDİ) */
+      .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; min-width: 50px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
       .rank-1 { background: linear-gradient(135deg, #facc15, #eab308); color: #422006; box-shadow: 0 0 12px rgba(250, 204, 21, 0.5); border: 1px solid #fef08a; }
       .rank-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #0f172a; box-shadow: 0 0 12px rgba(226, 232, 240, 0.5); border: 1px solid #f8fafc; }
-      .rank-3 { background: linear-gradient(135deg, #7dd3fc, #0ea5e9); color: #082f49; box-shadow: 0 0 12px rgba(56, 189, 248, 0.5); border: 1px solid #bae6fd; }
+      .rank-3 { background: linear-gradient(135deg, #fdba74, #ea580c); color: #431407; box-shadow: 0 0 12px rgba(234, 88, 12, 0.5); border: 1px solid #fed7aa; }
 
       @media (max-width: 768px) {
         .info-box { font-size: 13px; padding: 12px; } .info-box span { font-size: 14px; }
@@ -202,12 +202,12 @@ app.get("/", async (req, res) => {
         ${players.map((p) => {
           const kd = (p.total_kills / Math.max(p.total_deaths, 1));
           
-          // MADALYA MANTIĞI BURADA EKLENDİ
+          // MADALYA MANTIĞI (ALTIN, GÜMÜŞ, BRONZ)
           const r = parseInt(p.real_rank);
           let rankDisplay = `<b>${r}</b>`;
           if (r === 1) rankDisplay = `<span class="rank-badge rank-1">🥇 1</span>`;
           else if (r === 2) rankDisplay = `<span class="rank-badge rank-2">🥈 2</span>`;
-          else if (r === 3) rankDisplay = `<span class="rank-badge rank-3">💎 3</span>`;
+          else if (r === 3) rankDisplay = `<span class="rank-badge rank-3">🥉 3</span>`;
 
           return `<tr><td>${rankDisplay}</td><td><span class="player-nick">${escapeHTML(p.nick)}</span></td><td>${p.total_kills}</td><td>${p.total_deaths}</td><td class="${kd >= 2.0 ? 'kd-high' : (kd < 1.0 ? 'kd-low' : '')}">${kd.toFixed(2)}</td><td>${p.total_damage}</td><td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td></tr>`;
         }).join('')}
