@@ -285,15 +285,21 @@ app.get("/", async (req, res) => {
           left: 0;
           z-index: 10 !important;
           background: #111a2e !important;
-          border-right: none !important; /* NOKTALARI TEMIZLEYEN SATIR */
-          box-shadow: 4px 0 8px rgba(0,0,0,0.9); /* ARKANIN SIZMASINI ENGELLEYEN GÖLGE */
+          border-right: none !important;
+          box-shadow: 4px 0 8px rgba(0,0,0,0.9);
+          max-width: 140px; /* Mobilde Nick alanını daraltıyoruz */
         }
         
-        /* Zebra deseni için opaklığı koru */
+        /* İstatistik sütunlarını mobilde daraltıyoruz */
+        th:nth-child(n+3), td:nth-child(n+3) {
+          width: auto !important;
+          padding: 8px 5px !important;
+          font-size: 13px !important;
+        }
+
         tr:nth-child(even) td:nth-child(2) { background: #1a243a !important; }
         tr:nth-child(odd) td:nth-child(2) { background: #111a2e !important; }
         
-        /* Tıklama/Seçilme Anında Sabitliği Koru */
         tr:active td:nth-child(2), 
         tr:focus td:nth-child(2),
         td:nth-child(2):active {
