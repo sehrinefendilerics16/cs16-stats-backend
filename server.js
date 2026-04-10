@@ -239,27 +239,25 @@ app.get("/", async (req, res) => {
       }
       table{width:100%;border-collapse:collapse;min-width:800px; table-layout: fixed;}
       
-      /* Sütun Genişlikleri */
-      th:nth-child(1), td:nth-child(1) { width: 60px; } /* SIRA */
-      th:nth-child(2), td:nth-child(2) { width: 220px; text-align: left; padding-left: 20px; } /* NICK */
+      th:nth-child(1), td:nth-child(1) { width: 60px; } 
+      th:nth-child(2), td:nth-child(2) { width: 220px; text-align: left; padding-left: 20px; } 
       
       th{
-        background:#020617; /* Sert siyah başlık */
+        background:#020617;
         padding:15px;
         color:#38bdf8;
         text-transform:uppercase;
         font-size:13px;
-        border: 1px solid #1e293b; /* Dikey çizgiler */
+        border: 1px solid #1e293b;
         letter-spacing: 1px;
       }
       td{
         padding:12px;
         text-align:center;
-        border: 1px solid #1e293b; /* Dikey çizgiler */
+        border: 1px solid #1e293b;
         font-size: 15px;
       }
       
-      /* Zebra Deseni */
       tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
       tr:nth-child(odd) td { background: rgba(15, 23, 42, 0.2); }
 
@@ -273,21 +271,21 @@ app.get("/", async (req, res) => {
       .pagination{display:flex;justify-content:center;align-items:center;gap:15px;margin:30px 0;}
       button,.nav-btn{padding:12px 25px;border-radius:8px;background:#38bdf8;color:white;font-weight:bold;text-decoration:none;cursor:pointer;transition:0.3s;border:none;font-size:15px;}
 
-      /* MOBIL UYUMLULUK KURALLARI */
+      /* MOBIL UYUMLULUK VE MASKELENMIS NICK SUTUNU */
       @media (max-width: 768px) {
         .content-wrapper { width: 100%; padding: 5px; box-sizing: border-box;}
         input { width: 100%; }
         button { width: 100%; }
         .box { min-width: 120px; font-size: 13px; padding: 10px; }
         
-        /* Mobilde Nick Sütununu Sabitleme */
-        .table-container { position: relative; }
+        /* Nick Sütununu Katı Duvar Yaparak Sızmayı Engelliyoruz */
         th:nth-child(2), td:nth-child(2) {
           position: sticky;
           left: 0;
           z-index: 2;
-          background: #0f172a !important;
+          background: #111a2e !important; /* Arka veriyi kapatan opak renk */
           border-right: 2px solid #38bdf8;
+          box-shadow: 2px 0 5px rgba(0,0,0,0.5);
         }
         th:nth-child(2) { z-index: 3; background: #020617 !important; }
       }
