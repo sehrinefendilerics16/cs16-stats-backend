@@ -88,7 +88,7 @@ async function fetchAndSave() {
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ (MOBİL UYARI SİSTEMLİ) =================
+// ================= 4. ARAYÜZ (WEB GÖRÜNÜRLÜK GÜNCELLEMESİ) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
@@ -123,39 +123,51 @@ app.get("/", async (req, res) => {
       .main-title{font-size:clamp(22px,5vw,42px);font-weight:900;letter-spacing:2px;margin:0;text-shadow:0 0 15px rgba(56,189,248,0.5);}
       .ip-title{color:#38bdf8;font-size:clamp(16px,3vw,26px);margin:5px 0;}
       
-      /* MOBİL UYARI BANNERI */
       .mobile-tip {
-        background: rgba(56, 189, 248, 0.15);
-        border: 1px solid #38bdf8;
-        padding: 12px;
-        margin: 10px;
-        border-radius: 8px;
-        font-size: 13px;
-        color: #e2e8f0;
-        text-align: center;
-        backdrop-filter: blur(5px);
+        background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; padding: 12px; margin: 10px auto; border-radius: 8px; font-size: 14px; color: #e2e8f0; text-align: center; max-width: 1200px;
         display: ${isMobile ? 'block' : 'none'};
       }
-      .mobile-tip b { color: #38bdf8; }
 
       .content-wrapper{width:98%;max-width:1400px;margin:0 auto;}
-      .info-box{ text-align:center; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); padding: 12px; margin: 15px auto; max-width: 800px; border-radius: 10px; font-size: 13px; }
-      .info-box span { color: #facc15; font-weight: bold; }
-      .update-badge { text-align: center; margin: 0 auto 20px; font-size: 13px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 6px 15px; border-radius: 20px; border: 1px solid rgba(56, 189, 248, 0.3); }
-      .search{text-align:center;margin:20px 0; display:flex; justify-content:center; gap:8px;}
-      input{padding:12px;border-radius:6px;border:1px solid #334155;width:60%;background:#1e293b;color:white;outline:none;}
+      
+      /* BÜYÜTÜLEN BİLGİ KUTULARI (WEB ODAKLI) */
+      .info-box{ 
+        text-align:center; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); padding: 18px; margin: 20px auto; max-width: 1200px; border-radius: 10px; 
+        font-size: 16px; /* Web'de büyütüldü */
+        line-height: 1.5;
+      }
+      .info-box span { color: #facc15; font-weight: bold; font-size: 18px; }
+      
+      .update-badge { 
+        text-align: center; margin: 0 auto 30px; font-size: 15px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.3); 
+        box-shadow: 0 0 15px rgba(0,0,0,0.3);
+      }
+      .update-badge b { color: #38bdf8; font-weight: 800; }
+
+      .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px;}
+      input{padding:14px;border-radius:6px;border:1px solid #334155;width:50%;background:#1e293b;color:white;outline:none;font-size:16px;}
       input::placeholder { color: rgba(255,255,255,0.4); font-style: italic; }
-      button,.nav-btn{padding:12px 25px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;}
-      .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:8px 15px;border-radius:6px;border:1px solid #e1306c;}
+      button,.nav-btn{padding:14px 30px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;font-size:16px;}
+      
+      .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:10px 20px;border-radius:6px;border:1px solid #e1306c;}
       
       .table-container{ width:100%; overflow-x:auto; background:rgba(15, 23, 42, 0.95); border-radius:8px; border: 1px solid #1e293b; -webkit-overflow-scrolling: touch; }
       table{width:100%; border-collapse:collapse; table-layout: fixed; min-width: 800px;}
-      th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 14px; }
-      th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:12px; letter-spacing: 1px; }
+      th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; }
+      th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:13px; letter-spacing: 1px; }
       tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
       .player-nick{ color:#38bdf8; font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; text-align: left; }
       
+      .kd-high { color: #00ff00 !important; font-weight: bold; }
+      .kd-low { color: #ff4500 !important; }
+
       @media (max-width: 768px) {
+        .info-box { font-size: 13px; padding: 12px; }
+        .info-box span { font-size: 14px; }
+        .update-badge { font-size: 13px; padding: 6px 15px; }
+        input { width: 65%; font-size: 14px; }
+        button { padding: 12px 20px; font-size: 14px; }
+        
         th:nth-child(2), td:nth-child(2) {
           position: sticky; left: 0; z-index: 10 !important;
           background: #111a2e !important; width: 130px !important; min-width: 130px !important;
@@ -164,7 +176,6 @@ app.get("/", async (req, res) => {
         .player-nick { width: 115px !important; }
         th:nth-child(n+3), td:nth-child(n+3) { width: 95px !important; min-width: 95px !important; }
         th:nth-child(1), td:nth-child(1) { width: 40px !important; min-width: 40px !important; }
-        th:nth-child(2) { z-index: 11 !important; background: #020617 !important; }
       }
     </style></head><body>
       <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
@@ -175,8 +186,14 @@ app.get("/", async (req, res) => {
         </div>
 
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
-        <div class="info-box">⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.</div>
-        <div class="update-badge">Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.</div>
+        
+        <div class="info-box">
+          ⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.
+        </div>
+        
+        <div class="update-badge">
+          Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.
+        </div>
         
         <form class="search">
           <input name="search" placeholder="Nick giriniz..." value="${escapeHTML(search)}">
