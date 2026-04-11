@@ -41,11 +41,31 @@ const CACHE_LIMIT = 50;
 const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(20).toString('hex'); 
 const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg?v=3";
 
+// ================= 2. GÜVENLİK: RATE LIMITER (Spam Koruması) =================
+let rateMap = new Map();
+function rateLimit(req, limit = 60, windowMs = 60000) {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const now = Date.now();
+  if (!rateMap.has(ip)) { rateMap.set(ip, { count: 1, start: now }); return true; }
+  const data = rateMap.get(ip);
+  if (now - data.start > windowMs) { rateMap.set(ip, { count: 1, start: now }); return true; }
+  if (data.count >= limit) return false;
+  data.count++; return true;
+}
+
+// Memory Leak Koruması (RateMap Temizleyici)
 function cleanCache() {
   const now = Date.now();
   for (const key in cache) { if (now - cache[key].time > 30000) delete cache[key]; }
   if (Object.keys(cache).length > CACHE_LIMIT) cache = {}; 
+  if (rateMap.size > 1000) rateMap.clear(); // Rate limiter şişmesini engeller
 }
+
+app.use((req, res, next) => {
+  if (!rateLimit(req)) return res.status(429).send("Çok fazla istek yolladınız. Lütfen biraz bekleyin.");
+  next();
+});
+// ==============================================================================
 
 async function initDB() {
   const client = await pool.connect();
@@ -70,22 +90,18 @@ async function fetchPlayers(retry = 2) {
   try {
     const { data } = await axios.get(BASE_URL, { timeout: 8000 });
     const $ = cheerio.load(data);
-    const players = [];
+    let players = [];
     const rows = $("table.CSS_Table_Example tr").length ? $("table.CSS_Table_Example tr") : $("table tr");
 
-    // ==========================================
     // 🛡️ GÜVENLİK SENSÖRÜ (BAŞLIK KONTROLÜ)
-    // ==========================================
     const firstRowCols = $(rows[0]).find("td, th");
     const kHeader = $(firstRowCols[2]).text().toLowerCase();
     const dHeader = $(firstRowCols[4]).text().toLowerCase();
     const dmgHeader = $(firstRowCols[7]).text().toLowerCase();
 
-    // Başlıkların içinde öldürme, ölüm veya zarar/damage kelimeleri geçmiyorsa sistemi durdur!
     if (!kHeader.includes("öldürme") || !dHeader.includes("ölüm") || (!dmgHeader.includes("zarar") && !dmgHeader.includes("damage"))) {
         throw new Error("KRİTİK HATA: OyunYöneticisi sütun yerlerini değiştirmiş! Arşiv korumaya alındı.");
     }
-    // ==========================================
 
     rows.each((i, row) => {
       if (i === 0) return;
@@ -101,7 +117,22 @@ async function fetchPlayers(retry = 2) {
         damage: parseInt($(cols[7]).text()) || 0
       });
     });
-    return players;
+
+    // ================= 3. GÜVENLİK: MANTIKSAL DOĞRULAMA (Sanity Check) =================
+    const validPlayers = players.filter(p => {
+      if (p.kills < 0 || p.deaths < 0 || p.damage < 0) return false;
+      if (p.kills > 150000 || p.deaths > 150000) return false; // İmkansız sayılar
+      if (p.hsPercent < 0 || p.hsPercent > 100) return false;
+      if (p.accuracy < 0 || p.accuracy > 100) return false;
+      return true;
+    });
+
+    if (validPlayers.length < players.length * 0.7) {
+      throw new Error("KRİTİK HATA: Sütunlar karışmış veya mantıksız veriler var! Arşiv korumaya alındı.");
+    }
+    return validPlayers;
+    // ===================================================================================
+
   } catch (err) { if (retry > 0) return fetchPlayers(retry - 1); throw err; }
 }
 
@@ -136,13 +167,12 @@ async function fetchAndSave() {
   } catch (err) { 
     if (client) await client.query('ROLLBACK'); 
     console.error("Motor Hatası:", err.message);
-    // KRİTİK HATA DURUMUNDA MAİL GÖNDER
     sendAlertMail(err.message); 
   } 
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 2. ARAYÜZ (ANALYTICS DAHİL) =================
+// ================= 4. ARAYÜZ (ANALYTICS DAHİL) =================
 app.get("/", async (req, res) => {
   const userAgent = req.headers['user-agent'] || "";
   const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
@@ -257,7 +287,7 @@ app.get("/", async (req, res) => {
   } catch (err) { res.status(500).send("Hata."); }
 });
 
-// ================= 3. YÖNETİM LİNKLERİ =================
+// ================= 5. YÖNETİM LİNKLERİ =================
 const adminLayout = (title, message, subMessage) => `
   <html><head><meta charset="UTF-8"><title>${title}</title>
   <link rel="icon" href="${logoUrl}">
