@@ -6,12 +6,14 @@ const { Pool } = require("pg");
 const nodemailer = require("nodemailer");
 
 const app = express();
+app.set('trust proxy', 1); // 🛡️ Fix 2: Sahte IP (x-forwarded-for spoof) koruması
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// ================= 1. OTOMATİK MAİL SİSTEMİ =================
+// ================= 1. OTOMATİK MAİL SİSTEMİ (Anti-Spam Korumalı) =================
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -20,7 +22,11 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+let lastMailTime = 0; // 🛡️ Fix 5: Mail Spam Koruması
 const sendAlertMail = async (errorMsg) => {
+  const now = Date.now();
+  if (now - lastMailTime < 3600000) return; // Saatte sadece 1 kez mail atar!
+
   const mailOptions = {
     from: '"Şehrin Efendileri Sistem" <leventistemi@gmail.com>',
     to: "leventistemi@gmail.com",
@@ -30,6 +36,7 @@ const sendAlertMail = async (errorMsg) => {
   try { 
     await transporter.sendMail(mailOptions); 
     console.log("📧 Arıza maili başarıyla gönderildi.");
+    lastMailTime = now;
   } catch (e) { 
     console.error("Mail gönderme hatası:", e.message); 
   }
@@ -44,7 +51,7 @@ const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-sta
 // ================= 2. GÜVENLİK: RATE LIMITER (Spam Koruması) =================
 let rateMap = new Map();
 function rateLimit(req, limit = 60, windowMs = 60000) {
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const ip = req.ip || req.connection.remoteAddress; // Güvenli IP tespiti
   const now = Date.now();
   if (!rateMap.has(ip)) { rateMap.set(ip, { count: 1, start: now }); return true; }
   const data = rateMap.get(ip);
@@ -58,7 +65,11 @@ function cleanCache() {
   const now = Date.now();
   for (const key in cache) { if (now - cache[key].time > 30000) delete cache[key]; }
   if (Object.keys(cache).length > CACHE_LIMIT) cache = {}; 
-  if (rateMap.size > 1000) rateMap.clear(); // Rate limiter şişmesini engeller
+  
+  // 🛡️ Fix 3: Kaba balta temizlik yerine, sadece süresi dolan IP'leri sil
+  for (const [ip, data] of rateMap.entries()) {
+    if (now - data.start > 60000) rateMap.delete(ip);
+  }
 }
 
 app.use((req, res, next) => {
@@ -120,6 +131,7 @@ async function fetchPlayers(retry = 2) {
 
     // ================= 3. GÜVENLİK: MANTIKSAL DOĞRULAMA (Sanity Check) =================
     const validPlayers = players.filter(p => {
+      if (!p.nick || p.nick.length > 32) return false; // 🛡️ Fix 4: Garbage nick koruması
       if (p.kills < 0 || p.deaths < 0 || p.damage < 0) return false;
       if (p.kills > 150000 || p.deaths > 150000) return false; // İmkansız sayılar
       if (p.hsPercent < 0 || p.hsPercent > 100) return false;
