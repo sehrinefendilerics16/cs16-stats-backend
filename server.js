@@ -198,6 +198,7 @@ app.get("/", async (req, res) => {
       .info-box{ text-align:center; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); padding: 18px; margin: 20px auto; max-width: 1200px; border-radius: 10px; font-size: 16px; }
       .info-box span { color: #facc15; font-weight: bold; font-size: 18px; }
       .update-badge { text-align: center; margin: 0 auto 30px; font-size: 15px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.3); }
+      .desktop-tip { display: none; text-align: center; background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.4); padding: 12px 15px; margin: 0 auto 20px; border-radius: 8px; font-size: 14px; color: #fde047; max-width: 95%; }
       .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px; flex-wrap: wrap;}
       input{padding:14px;border-radius:6px;border:1px solid #334155;width:50%;background:#1e293b;color:white;outline:none;font-size:16px;}
       button{padding:14px 30px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;font-size:16px;}
@@ -217,6 +218,7 @@ app.get("/", async (req, res) => {
       .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; }
       .pagination span { background: #020617; border: 1px solid #1e293b; color: white; padding: 12px 25px; border-radius: 6px; font-weight: bold; }
       @media (max-width: 768px) {
+        .desktop-tip { display: block; }
         th:nth-child(2), td:nth-child(2) { position: sticky !important; left: 0 !important; z-index: 99 !important; background: #0f172a !important; width: 130px !important; box-shadow: 2px 0 5px rgba(0,0,0,0.5); }
         th:nth-child(2) { z-index: 100 !important; }
         tr:hover td:nth-child(2) { background: #1a243a !important; }
@@ -228,6 +230,7 @@ app.get("/", async (req, res) => {
         <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
         <div class="info-box">⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.</div>
         <div class="update-badge">Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.</div>
+        <div class="desktop-tip">💡 <b>İpucu:</b> Verilere daha detaylı bakabilmek için tarayıcı ayarlarından <b>"Masaüstü sitesi"</b> seçeneğini işaretleyebilirsiniz.</div>
         <form class="search" method="GET">
           <input name="search" placeholder="Nick giriniz..." value="${escapeHTML(search)}">
           <button type="submit">Ara</button>
