@@ -72,6 +72,21 @@ async function fetchPlayers(retry = 2) {
     const $ = cheerio.load(data);
     const players = [];
     const rows = $("table.CSS_Table_Example tr").length ? $("table.CSS_Table_Example tr") : $("table tr");
+
+    // ==========================================
+    // 🛡️ GÜVENLİK SENSÖRÜ (BAŞLIK KONTROLÜ)
+    // ==========================================
+    const firstRowCols = $(rows[0]).find("td, th");
+    const kHeader = $(firstRowCols[2]).text().toLowerCase();
+    const dHeader = $(firstRowCols[4]).text().toLowerCase();
+    const dmgHeader = $(firstRowCols[7]).text().toLowerCase();
+
+    // Başlıkların içinde öldürme, ölüm veya zarar/damage kelimeleri geçmiyorsa sistemi durdur!
+    if (!kHeader.includes("öldürme") || !dHeader.includes("ölüm") || (!dmgHeader.includes("zarar") && !dmgHeader.includes("damage"))) {
+        throw new Error("KRİTİK HATA: OyunYöneticisi sütun yerlerini değiştirmiş! Arşiv korumaya alındı.");
+    }
+    // ==========================================
+
     rows.each((i, row) => {
       if (i === 0) return;
       const cols = $(row).find("td");
