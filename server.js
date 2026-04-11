@@ -323,9 +323,26 @@ app.get("/status", async (req, res) => {
   } catch (e) { res.status(500).send("Hata"); }
 });
 
+// 🛡️ Fix 6: Admin Endpoint Cooldown (Spam Tıklama Koruması)
+let lastManualUpdate = 0;
+const UPDATE_COOLDOWN = 5 * 60 * 1000; // 5 dakika bekleme süresi
+
 app.get("/force-update", async (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
+  
+  const now = Date.now();
+  if (now - lastManualUpdate < UPDATE_COOLDOWN) {
+    const kalan = Math.ceil((UPDATE_COOLDOWN - (now - lastManualUpdate)) / 1000);
+    return res.status(429).send(adminLayout(
+      "⏳ İŞLEM BEKLETİLDİ", 
+      "⚠️ Güncelleme çok sık tetikleniyor.", 
+      `Sistemi yormamak için <b>${kalan} saniye</b> sonra tekrar deneyin.`
+    ));
+  }
+
+  lastManualUpdate = now; // Güvenlik için await'ten önce atanır!
   await fetchAndSave();
+  
   res.send(adminLayout("⚙️ İŞLEM BAŞARILI", "✅ Manuel Güncelleme Tetiklendi.", "Veritabanı OyunYöneticisi ile senkronize edildi."));
 });
 
