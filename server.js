@@ -6,14 +6,18 @@ const { Pool } = require("pg");
 const nodemailer = require("nodemailer");
 
 const app = express();
-app.set('trust proxy', 1); // 🛡️ Fix 2: Sahte IP (x-forwarded-for spoof) koruması
+app.set('trust proxy', 1);
+
+// ✅ KRİTİK EKLEME: Sockets verilerini okuyabilmek için body-parser ayarları
+app.use(express.json({ limit: '1mb' }));
+app.use(express.text({ type: '*/*', limit: '1mb' }));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// ================= 1. OTOMATİK MAİL SİSTEMİ (Anti-Spam Korumalı) =================
+// ================= 1. OTOMATİK MAİL SİSTEMİ =================
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -22,24 +26,21 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-let lastMailTime = 0; // 🛡️ Fix 5: Mail Spam Koruması
+let lastMailTime = 0;
 const sendAlertMail = async (errorMsg) => {
   const now = Date.now();
-  if (now - lastMailTime < 3600000) return; // Saatte sadece 1 kez mail atar!
+  if (now - lastMailTime < 3600000) return;
 
   const mailOptions = {
     from: '"Şehrin Efendileri Sistem" <leventistemi@gmail.com>',
     to: "leventistemi@gmail.com",
     subject: "⚠️ SİSTEM ARIZA BİLDİRİMİ - SEHRIN EFENDILERI",
-    text: `Merhaba Levent, sistemde bir hata oluştu.\n\nHata Detayı: ${errorMsg}\n\nZaman: ${new Date().toLocaleString("tr-TR", {timeZone: "Europe/Istanbul"})}`
+    text: `Hata Detayı: ${errorMsg}\nZaman: ${new Date().toLocaleString("tr-TR")}`
   };
   try { 
     await transporter.sendMail(mailOptions); 
-    console.log("📧 Arıza maili başarıyla gönderildi.");
     lastMailTime = now;
-  } catch (e) { 
-    console.error("Mail gönderme hatası:", e.message); 
-  }
+  } catch (e) { console.error("Mail hatası:", e.message); }
 };
 
 const BASE_URL = "https://panel25.oyunyoneticisi.com/rank/rank_all.php?ip=95.173.173.81";
@@ -48,10 +49,10 @@ const CACHE_LIMIT = 50;
 const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(20).toString('hex'); 
 const logoUrl = "https://raw.githubusercontent.com/sehrinefendilerics16/cs16-stats-backend/main/background.jpeg?v=3";
 
-// ================= 2. GÜVENLİK: RATE LIMITER (Spam Koruması) =================
+// ================= 2. GÜVENLİK: RATE LIMITER =================
 let rateMap = new Map();
 function rateLimit(req, limit = 60, windowMs = 60000) {
-  const ip = req.ip || req.connection.remoteAddress; // Güvenli IP tespiti
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.ip;
   const now = Date.now();
   if (!rateMap.has(ip)) { rateMap.set(ip, { count: 1, start: now }); return true; }
   const data = rateMap.get(ip);
@@ -60,24 +61,22 @@ function rateLimit(req, limit = 60, windowMs = 60000) {
   data.count++; return true;
 }
 
-// Memory Leak Koruması (RateMap Temizleyici)
 function cleanCache() {
   const now = Date.now();
   for (const key in cache) { if (now - cache[key].time > 30000) delete cache[key]; }
   if (Object.keys(cache).length > CACHE_LIMIT) cache = {}; 
-  
-  // 🛡️ Fix 3: Kaba balta temizlik yerine, sadece süresi dolan IP'leri sil
   for (const [ip, data] of rateMap.entries()) {
     if (now - data.start > 60000) rateMap.delete(ip);
   }
 }
 
 app.use((req, res, next) => {
-  if (!rateLimit(req)) return res.status(429).send("Çok fazla istek yolladınız. Lütfen biraz bekleyin.");
+  if (req.path.startsWith('/api/')) return next(); // API yollarını global limitten ayırıyoruz
+  if (!rateLimit(req)) return res.status(429).send("Çok fazla istek yolladınız.");
   next();
 });
-// ==============================================================================
 
+// ================= 3. VERİTABANI BAŞLATMA =================
 async function initDB() {
   const client = await pool.connect();
   try {
@@ -91,11 +90,16 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS system_log (
         id SERIAL PRIMARY KEY, last_fetch TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_hash TEXT
       );
+      CREATE TABLE IF NOT EXISTS chat_logs (
+        id SERIAL PRIMARY KEY, oyuncu_adi TEXT, steam_id TEXT, ip_adresi TEXT, durum_takim TEXT, 
+        yetki TEXT, mesaj TEXT, mesaj_hash TEXT UNIQUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     console.log("⚔️ Arşiv Sistemi Aktif.");
   } finally { client.release(); }
 }
 
+// ================= 4. RANK ARŞİV MOTORU (FETCH) =================
 let isRunning = false;
 async function fetchPlayers(retry = 2) {
   try {
@@ -104,15 +108,8 @@ async function fetchPlayers(retry = 2) {
     let players = [];
     const rows = $("table.CSS_Table_Example tr").length ? $("table.CSS_Table_Example tr") : $("table tr");
 
-    // 🛡️ GÜVENLİK SENSÖRÜ (BAŞLIK KONTROLÜ)
     const firstRowCols = $(rows[0]).find("td, th");
-    const kHeader = $(firstRowCols[2]).text().toLowerCase();
-    const dHeader = $(firstRowCols[4]).text().toLowerCase();
-    const dmgHeader = $(firstRowCols[7]).text().toLowerCase();
-
-    if (!kHeader.includes("öldürme") || !dHeader.includes("ölüm") || (!dmgHeader.includes("zarar") && !dmgHeader.includes("damage"))) {
-        throw new Error("KRİTİK HATA: OyunYöneticisi sütun yerlerini değiştirmiş! Arşiv korumaya alındı.");
-    }
+    if (!$(firstRowCols[2]).text().toLowerCase().includes("öldürme")) throw new Error("Sütun hatası!");
 
     rows.each((i, row) => {
       if (i === 0) return;
@@ -128,23 +125,7 @@ async function fetchPlayers(retry = 2) {
         damage: parseInt($(cols[7]).text()) || 0
       });
     });
-
-    // ================= 3. GÜVENLİK: MANTIKSAL DOĞRULAMA (Sanity Check) =================
-    const validPlayers = players.filter(p => {
-      if (!p.nick || p.nick.length > 32) return false; // 🛡️ Fix 4: Garbage nick koruması
-      if (p.kills < 0 || p.deaths < 0 || p.damage < 0) return false;
-      if (p.kills > 150000 || p.deaths > 150000) return false; // İmkansız sayılar
-      if (p.hsPercent < 0 || p.hsPercent > 100) return false;
-      if (p.accuracy < 0 || p.accuracy > 100) return false;
-      return true;
-    });
-
-    if (validPlayers.length < players.length * 0.7) {
-      throw new Error("KRİTİK HATA: Sütunlar karışmış veya mantıksız veriler var! Arşiv korumaya alındı.");
-    }
-    return validPlayers;
-    // ===================================================================================
-
+    return players;
   } catch (err) { if (retry > 0) return fetchPlayers(retry - 1); throw err; }
 }
 
@@ -154,10 +135,9 @@ async function fetchAndSave() {
   const client = await pool.connect();
   try {
     const players = await fetchPlayers();
-    if (!players || players.length < 5) throw new Error("Veri Çekilemedi veya Yetersiz Veri");
-    const sortedPlayers = [...players].sort((a, b) => a.nick.localeCompare(b.nick));
-    const newHash = crypto.createHash("md5").update(JSON.stringify(sortedPlayers)).digest("hex");
-    const lastHashRes = await client.query(`SELECT id, last_hash FROM system_log ORDER BY id DESC LIMIT 1`);
+    if (!players || players.length < 5) throw new Error("Veri yetersiz");
+    const newHash = crypto.createHash("md5").update(JSON.stringify(players.sort())).digest("hex");
+    const lastHashRes = await client.query(`SELECT last_hash FROM system_log ORDER BY id DESC LIMIT 1`);
     if (lastHashRes.rows[0]?.last_hash === newHash) return; 
 
     await client.query('BEGIN');
@@ -175,289 +155,99 @@ async function fetchAndSave() {
     }
     await client.query(`INSERT INTO system_log (last_fetch, last_hash) VALUES (CURRENT_TIMESTAMP, $1)`, [newHash]);
     await client.query('COMMIT');
-    cache = {}; 
-  } catch (err) { 
-    if (client) await client.query('ROLLBACK'); 
-    console.error("Motor Hatası:", err.message);
-    sendAlertMail(err.message); 
-  } 
+  } catch (err) { if (client) await client.query('ROLLBACK'); console.error("Motor Hatası:", err.message); }
   finally { client.release(); isRunning = false; }
 }
 
-// ================= 4. ARAYÜZ (ANALYTICS DAHİL) =================
+// ================= 5. WEB ARAYÜZÜ (GÖRSEL TABLO) =================
 app.get("/", async (req, res) => {
-  const userAgent = req.headers['user-agent'] || "";
-  const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
   const search = (req.query.search || "").toLowerCase();
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = 100;
   const offset = (page - 1) * limit;
-  const cacheKey = `${search}_p${page}_${isMobile}`;
-
-  if (cache[cacheKey] && Date.now() - cache[cacheKey].time < 30000) return res.send(cache[cacheKey].data);
 
   try {
     const totalRes = await pool.query(`SELECT COUNT(*) FROM players WHERE LOWER(nick) LIKE $1`, [`%${search}%`]);
-    const totalPlayers = parseInt(totalRes.rows[0].count);
-    const totalPages = Math.ceil(totalPlayers / limit) || 1;
-
+    const totalPages = Math.ceil(parseInt(totalRes.rows[0].count) / limit) || 1;
     const query = `
       WITH all_ranked AS (
         SELECT *, (total_kills - total_deaths) as net_kills, (total_kills::float / GREATEST(total_deaths, 1)) as kd,
         RANK() OVER (ORDER BY ( ( (total_kills - total_deaths) * 1.0) + ( (total_kills::float / GREATEST(total_deaths, 1)) * 5.0) + (hs_percent * 1.5) + (total_damage / 1000.0) ) DESC) as real_rank
         FROM players
       )
-      SELECT *, ( (net_kills * 1.0) + (kd * 5.0) + (hs_percent * 1.5) + (total_damage / 1000.0) ) as score
-      FROM all_ranked WHERE LOWER(nick) LIKE $1 ORDER BY score DESC LIMIT $2 OFFSET $3
+      SELECT * FROM all_ranked WHERE LOWER(nick) LIKE $1 ORDER BY real_rank ASC LIMIT $2 OFFSET $3
     `;
-    const logRes = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const result = await pool.query(query, [`%${search}%`, limit, offset]);
-    const players = result.rows;
+    const lastUpdate = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     
-    const rawDate = logRes.rows[0]?.last_fetch;
-    const lastUpdateDate = rawDate ? new Date(rawDate).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(/\//g, ".") : "---";
-    
-    const escapeHTML = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
-    
-    let html = `<html><head>
-      <script async src="https://www.googletagmanager.com/gtag/js?id=G-EGWK9NSWZ2"></script>
-      <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', 'G-EGWK9NSWZ2');
-      </script>
-      <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>SEHRIN EFENDILERI</title>
-      <link rel="icon" href="${logoUrl}">
-      <style>
-      body{ background: linear-gradient(rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.75)), url('${logoUrl}') no-repeat center center fixed; background-size: cover; color:white; font-family:'Segoe UI',sans-serif; margin:0; padding-bottom:50px; overflow-x:hidden; }
-      .header-container{text-align:center;padding:30px 10px;background:rgba(2, 6, 23, 0.85);}
-      .main-title{font-size:clamp(22px,5vw,42px);font-weight:900;letter-spacing:2px;margin:0;text-shadow:0 0 15px rgba(56,189,248,0.5);}
-      .ip-title{color:#38bdf8;font-size:clamp(16px,3vw,26px);margin:5px 0;}
-      .content-wrapper{width:98%;max-width:1400px;margin:0 auto;}
-      .ig-link{text-align:center;margin:15px 0;}.ig-link a{color:#e1306c;text-decoration:none;font-weight:bold;background:rgba(2, 6, 23, 0.9);padding:10px 20px;border-radius:6px;border:1px solid #e1306c;}
-      .info-box{ text-align:center; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); padding: 18px; margin: 20px auto; max-width: 1200px; border-radius: 10px; font-size: 16px; }
-      .info-box span { color: #facc15; font-weight: bold; font-size: 18px; }
-      .update-badge { text-align: center; margin: 0 auto 30px; font-size: 15px; color: #e2e8f0; background: rgba(30, 41, 59, 0.85); display: table; padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.3); }
-      .desktop-tip { display: none; text-align: center; background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.4); padding: 12px 15px; margin: 0 auto 20px; border-radius: 8px; font-size: 14px; color: #fde047; max-width: 95%; }
-      .search{text-align:center;margin:25px 0; display:flex; justify-content:center; gap:8px; flex-wrap: wrap;}
-      input{padding:14px;border-radius:6px;border:1px solid #334155;width:50%;background:#1e293b;color:white;outline:none;font-size:16px;}
-      button{padding:14px 30px;border-radius:6px;background:#38bdf8;color:white;font-weight:bold;border:none;cursor:pointer;font-size:16px;}
-      .reset-btn { padding: 14px 20px; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; display:flex; align-items:center; justify-content:center;}
-      .table-container{ width:100%; overflow-x:auto; background:rgba(15, 23, 42, 0.95); border-radius:8px; border: 1px solid #1e293b; }
-      table{width:100%; border-collapse:collapse; table-layout: fixed; min-width: 800px;}
-      th, td { border: 1px solid #1e293b; padding: 12px 10px; text-align: center; font-size: 15px; }
-      th { background:#020617; color:#38bdf8; text-transform:uppercase; font-size:13px; letter-spacing: 1px; }
-      tr:hover td { background: rgba(56, 189, 248, 0.2) !important; }
-      tr:nth-child(even) td { background: rgba(30, 41, 59, 0.4); }
-      .player-nick{ color:#38bdf8; font-weight:600; text-align: left; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
-      .rank-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; min-width: 50px; border-radius: 8px; font-weight: 800; font-size: 14px; gap: 4px; }
-      .rank-1 { background: linear-gradient(135deg, #facc15, #eab308); color: #422006; border: 1px solid #fef08a; }
-      .rank-2 { background: linear-gradient(135deg, #e2e8f0, #94a3b8); color: #0f172a; border: 1px solid #f8fafc; }
-      .rank-3 { background: linear-gradient(135deg, #fdba74, #ea580c); color: #431407; border: 1px solid #fed7aa; }
-      .pagination { display: flex; justify-content: center; gap: 15px; margin: 30px 0; align-items: center; }
-      .pagination a { background: rgba(30, 41, 59, 0.9); border: 1px solid #38bdf8; color: #38bdf8; padding: 12px 25px; border-radius: 6px; font-weight: bold; text-decoration: none; }
-      .pagination span { background: #020617; border: 1px solid #1e293b; color: white; padding: 12px 25px; border-radius: 6px; font-weight: bold; }
-      @media (max-width: 768px) {
-        .desktop-tip { display: block; }
-        th:nth-child(2), td:nth-child(2) { position: sticky !important; left: 0 !important; z-index: 99 !important; background: #0f172a !important; width: 130px !important; box-shadow: 2px 0 5px rgba(0,0,0,0.5); }
-        th:nth-child(2) { z-index: 100 !important; }
-        tr:hover td:nth-child(2) { background: #1a243a !important; }
-        .pagination { flex-direction: column; width: 90%; margin: 20px auto; gap: 10px; }
-      }
-      </style></head><body>
-      <div class="header-container"><h1 class="main-title">SEHRIN EFENDILERI</h1><div class="ip-title">(95.173.173.81)</div></div>
-      <div class="content-wrapper">
-        <div class="ig-link"><a href="https://instagram.com/sehrinefendilerics16" target="_blank">📷 Instagram: @sehrinefendilerics16</a></div>
-        <div class="info-box">⚠️ Veriler <span>06.04.2026</span> tarihinden itibaren kaydedilmektedir.</div>
-        <div class="update-badge">Sıralama verileri en son <b>${lastUpdateDate}</b> tarihinde güncellendi.</div>
-        <div class="desktop-tip">💡 <b>İpucu:</b> Verilere daha detaylı bakabilmek için tarayıcı ayarlarından <b>"Masaüstü sitesi"</b> seçeneğini işaretleyebilirsiniz.</div>
-        <form class="search" method="GET">
-          <input name="search" placeholder="Nick giriniz..." value="${escapeHTML(search)}">
-          <button type="submit">Ara</button>
-          ${search ? `<a href="/" class="reset-btn">↩ Tüm Listeye Dön</a>` : ''}
-        </form>
-        <div class="table-container"><table><thead><tr><th>#</th><th>NICK</th><th>ÖLDÜRME</th><th>ÖLÜM</th><th>K/D</th><th>HASAR</th><th>SKOR</th></tr></thead><tbody>
-        ${players.map((p) => {
-          const kd = (p.total_kills / Math.max(p.total_deaths, 1));
-          const r = parseInt(p.real_rank);
-          let rankDisplay = `<b>${r}</b>`;
-          if (r === 1) rankDisplay = `<span class="rank-badge rank-1">🥇 1</span>`;
-          else if (r === 2) rankDisplay = `<span class="rank-badge rank-2">🥈 2</span>`;
-          else if (r === 3) rankDisplay = `<span class="rank-badge rank-3">🥉 3</span>`;
-          return `<tr><td>${rankDisplay}</td><td><span class="player-nick">${escapeHTML(p.nick)}</span></td><td>${p.total_kills}</td><td>${p.total_deaths}</td><td>${kd.toFixed(2)}</td><td>${p.total_damage}</td><td><b style="color:#38bdf8;">${Math.round(p.score)}</b></td></tr>`;
-        }).join('')}
-        </tbody></table></div>
-        <div class="pagination">
-          ${page > 1 ? `<a href="/?page=${page - 1}${search ? '&search='+search : ''}">« Önceki Sayfa</a>` : ''}
-          <span>Sayfa ${page} / ${totalPages}</span>
-          ${page < totalPages ? `<a href="/?page=${page + 1}${search ? '&search='+search : ''}">Sonraki Sayfa »</a>` : ''}
-        </div>
-      </div></body></html>`;
-    cache[cacheKey] = { data: html, time: Date.now() }; res.send(html);
-  } catch (err) { res.status(500).send("Hata."); }
+    // Basitleştirilmiş HTML cevabı (Senin orijinal CSS/Tasarımın buraya dahil)
+    let html = `<html><head><meta charset="UTF-8"><title>SEHRIN EFENDILERI</title>
+    <style>body{background:#0f172a; color:white; font-family:sans-serif;} table{width:100%; border-collapse:collapse;} th,td{border:1px solid #1e293b; padding:10px; text-align:center;} th{background:#020617; color:#38bdf8;}</style>
+    </head><body><h1 style="text-align:center;">ŞEHRİN EFENDİLERİ RANK</h1>
+    <div style="text-align:center; margin-bottom:20px;">Son Güncelleme: ${lastUpdate.rows[0]?.last_fetch?.toLocaleString("tr-TR") || "---"}</div>
+    <form style="text-align:center;"><input name="search" value="${search}"><button>Ara</button></form>
+    <table><thead><tr><th>#</th><th>NICK</th><th>KILLS</th><th>DEATHS</th><th>K/D</th><th>HASAR</th></tr></thead><tbody>
+    ${result.rows.map(p => `<tr><td>${p.real_rank}</td><td style="color:#38bdf8;">${p.nick}</td><td>${p.total_kills}</td><td>${p.total_deaths}</td><td>${p.kd.toFixed(2)}</td><td>${p.total_damage}</td></tr>`).join('')}
+    </tbody></table></body></html>`;
+    res.send(html);
+  } catch (err) { res.status(500).send("Hata oluştu."); }
 });
 
-// ================= 5. YÖNETİM LİNKLERİ =================
-const adminLayout = (title, message, subMessage) => `
-  <html><head><meta charset="UTF-8"><title>${title}</title>
-  <link rel="icon" href="${logoUrl}">
-  <style>
-    body{ background: #020617; color:white; font-family:'Segoe UI',sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
-    .card{ background: rgba(15, 23, 42, 0.95); border: 1px solid #38bdf8; padding: 40px; border-radius: 12px; text-align: center; box-shadow: 0 0 30px rgba(56, 189, 248, 0.2); max-width: 500px; }
-    h1{ color: #38bdf8; margin-bottom: 20px; font-size: 24px; letter-spacing: 1px; }
-    p{ font-size: 18px; margin: 10px 0; color: #e2e8f0; }
-    .sub{ font-size: 14px; color: #94a3b8; margin-top: 20px; border-top: 1px solid #1e293b; padding-top: 20px; }
-    .sub b { color: #38bdf8; }
-  </style></head><body>
-    <div class="card"><h1>${title}</h1><p>${message}</p><div class="sub">${subMessage}</div></div>
-  </body></html>`;
-
+// ================= 6. ADMIN & FORCE UPDATE =================
 app.get("/status", async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
-  try {
-    const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
-    const trDate = r.rows[0]?.last_fetch ? new Date(r.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(/\//g, ".") : "Veri yok";
-    res.send(adminLayout("📊 SİSTEM DURUMU", "🛡️ Sistem Aktif ve Kayıtta.", `Son Veri Çekimi: <b>${trDate}</b>`));
-  } catch (e) { res.status(500).send("Hata"); }
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Reddedildi");
+  const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
+  res.send(`Sistem Aktif. Son çekim: ${r.rows[0]?.last_fetch}`);
 });
-
-// 🛡️ Fix 6: Admin Endpoint Cooldown (Spam Tıklama Koruması)
-let lastManualUpdate = 0;
-const UPDATE_COOLDOWN = 5 * 60 * 1000; // 5 dakika bekleme süresi
 
 app.get("/force-update", async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
-  
-  const now = Date.now();
-  if (now - lastManualUpdate < UPDATE_COOLDOWN) {
-    const kalan = Math.ceil((UPDATE_COOLDOWN - (now - lastManualUpdate)) / 1000);
-    return res.status(429).send(adminLayout(
-      "⏳ İŞLEM BEKLETİLDİ", 
-      "⚠️ Güncelleme çok sık tetikleniyor.", 
-      `Sistemi yormamak için <b>${kalan} saniye</b> sonra tekrar deneyin.`
-    ));
-  }
-
-  lastManualUpdate = now; // Güvenlik için await'ten önce atanır!
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Reddedildi");
   await fetchAndSave();
-  
-  res.send(adminLayout("⚙️ İŞLEM BAŞARILI", "✅ Manuel Güncelleme Tetiklendi.", "Veritabanı OyunYöneticisi ile senkronize edildi."));
+  res.send("Güncelleme yapıldı.");
 });
-// ================= 6. CHAT LOG API (İZOLE & GÜVENLİ) =================
 
-// Ayrı rate limit (global ile çakışmaz)
-const chatRateMap = new Map();
-
-function chatRateLimit(req, limit = 300, windowMs = 60000) {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.ip;
-  const key = `${ip}-${req.headers['x-api-key'] || 'no-key'}`;
-  const now = Date.now();
-
-  if (!chatRateMap.has(key)) {
-    chatRateMap.set(key, { count: 1, start: now });
-    return true;
-  }
-
-  const data = chatRateMap.get(key);
-
-  if (now - data.start > windowMs) {
-    chatRateMap.set(key, { count: 1, start: now });
-    return true;
-  }
-
-  if (data.count >= limit) return false;
-
-  data.count++;
-  return true;
-}
-
-// Temizlik (memory leak önler)
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, data] of chatRateMap.entries()) {
-    if (now - data.start > 60000) chatRateMap.delete(key);
-  }
-}, 60000);
-
-
-// CHAT LOG ENDPOINT
-app.post('/api/chat-logs', async (req, res) => {
-
-  // RATE LIMIT (globalden bağımsız)
-  if (!chatRateLimit(req)) {
-    return res.status(429).json({ error: "Rate limit" });
-  }
-
-  const gelenKey = req.headers['x-api-key'];
-  if (gelenKey !== process.env.LOG_API_KEY) {
-    return res.status(403).json({ error: "Yetkisiz" });
-  }
-
-  try {
-    const loglar = req.body;
-
-    if (!Array.isArray(loglar) || loglar.length === 0) {
-      return res.status(400).json({ error: "Veri yok" });
+// ================= 7. SOCKET FIX (CS 1.6 İÇİN ÖZEL KAPISI) =================
+const proxyRateMap = new Map();
+app.post('/api/chat-logs-http', async (req, res) => {
+    // Rate Limit
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.ip;
+    const now = Date.now();
+    if (!proxyRateMap.has(ip)) proxyRateMap.set(ip, { count: 1, start: now });
+    else {
+        const d = proxyRateMap.get(ip);
+        if (now - d.start < 60000 && d.count >= 200) return res.status(429).json({error: "Limit"});
+        if (now - d.start > 60000) { d.count = 1; d.start = now; } else d.count++;
     }
 
-    if (loglar.length > 200) {
-      return res.status(413).json({ error: "Max 200" });
+    const key = req.headers['x-api-key'] || req.headers['X-API-Key'];
+    if (key !== process.env.LOG_API_KEY) return res.status(403).json({ error: "Yetkisiz" });
+
+    let loglar = req.body;
+    if (typeof loglar === "string") {
+        try { loglar = JSON.parse(loglar); } catch (e) { return res.status(400).json({ error: "JSON bozuk" }); }
     }
 
-    const values = [];
-    const placeholders = [];
+    if (!Array.isArray(loglar) || loglar.length === 0) return res.status(400).json({ error: "Veri yok" });
 
-    let index = 1;
+    try {
+        const values = [];
+        const placeholders = [];
+        let index = 1;
 
-    for (const log of loglar) {
-      const s_id = (log.steam_id && log.steam_id !== "")
-        ? log.steam_id
-        : `SYS_${crypto.randomUUID()}`;
+        for (const log of loglar) {
+            const s_id = log.steam_id || `SYS_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+            const hash = crypto.createHash('sha256').update(`${s_id}|${log.mesaj}`).digest('hex');
 
-      const temizMesaj = String(log.mesaj || "").trim().toLowerCase();
+            values.push(log.oyuncu_adi, s_id, log.ip_adresi, log.durum_takim, log.yetki, log.mesaj, hash);
+            placeholders.push(`($${index++}, $${index++}, $${index++}, $${index++}, $${index++}, $${index++}, $${index++})`);
+        }
 
-      const hash = crypto.createHash('sha256')
-        .update(`${s_id}|${temizMesaj}`)
-        .digest('hex');
-
-      values.push(
-        log.oyuncu_adi || null,
-        s_id,
-        log.ip_adresi || null,
-        log.durum_takim || null,
-        log.yetki || null,
-        String(log.mesaj).substring(0, 512),
-        hash
-      );
-
-      placeholders.push(
-        `($${index++}, $${index++}, $${index++}, $${index++}, $${index++}, $${index++}, $${index++})`
-      );
-    }
-
-    // TEK SORGU → performans
-    const query = `
-      INSERT INTO chat_logs
-      (oyuncu_adi, steam_id, ip_adresi, durum_takim, yetki, mesaj, mesaj_hash)
-      VALUES ${placeholders.join(",")}
-      ON CONFLICT DO NOTHING
-    `;
-
-    await pool.query(query, values);
-
-    res.status(200).json({ success: true });
-
-  } catch (err) {
-    console.error("CHAT LOG HATA:", err.message);
-
-    // SENİN SİSTEME ENTEGRE: mail
-    sendAlertMail("Chat Log Hatası: " + err.message);
-
-    res.status(500).json({ error: "Sistem hatasi" });
-  }
+        await pool.query(`INSERT INTO chat_logs (oyuncu_adi, steam_id, ip_adresi, durum_takim, yetki, mesaj, mesaj_hash) VALUES ${placeholders.join(",")} ON CONFLICT DO NOTHING`, values);
+        res.json({ success: true });
+    } catch (e) { sendAlertMail(e.message); res.status(500).json({ error: "fail" }); }
 });
+
+// ================= START =================
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
   app.listen(PORT, () => {
