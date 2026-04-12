@@ -345,7 +345,119 @@ app.get("/force-update", async (req, res) => {
   
   res.send(adminLayout("⚙️ İŞLEM BAŞARILI", "✅ Manuel Güncelleme Tetiklendi.", "Veritabanı OyunYöneticisi ile senkronize edildi."));
 });
+// ================= 6. CHAT LOG API (İZOLE & GÜVENLİ) =================
 
+// Ayrı rate limit (global ile çakışmaz)
+const chatRateMap = new Map();
+
+function chatRateLimit(req, limit = 300, windowMs = 60000) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.ip;
+  const key = `${ip}-${req.headers['x-api-key'] || 'no-key'}`;
+  const now = Date.now();
+
+  if (!chatRateMap.has(key)) {
+    chatRateMap.set(key, { count: 1, start: now });
+    return true;
+  }
+
+  const data = chatRateMap.get(key);
+
+  if (now - data.start > windowMs) {
+    chatRateMap.set(key, { count: 1, start: now });
+    return true;
+  }
+
+  if (data.count >= limit) return false;
+
+  data.count++;
+  return true;
+}
+
+// Temizlik (memory leak önler)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, data] of chatRateMap.entries()) {
+    if (now - data.start > 60000) chatRateMap.delete(key);
+  }
+}, 60000);
+
+
+// CHAT LOG ENDPOINT
+app.post('/api/chat-logs', async (req, res) => {
+
+  // RATE LIMIT (globalden bağımsız)
+  if (!chatRateLimit(req)) {
+    return res.status(429).json({ error: "Rate limit" });
+  }
+
+  const gelenKey = req.headers['x-api-key'];
+  if (gelenKey !== process.env.LOG_API_KEY) {
+    return res.status(403).json({ error: "Yetkisiz" });
+  }
+
+  try {
+    const loglar = req.body;
+
+    if (!Array.isArray(loglar) || loglar.length === 0) {
+      return res.status(400).json({ error: "Veri yok" });
+    }
+
+    if (loglar.length > 200) {
+      return res.status(413).json({ error: "Max 200" });
+    }
+
+    const values = [];
+    const placeholders = [];
+
+    let index = 1;
+
+    for (const log of loglar) {
+      const s_id = (log.steam_id && log.steam_id !== "")
+        ? log.steam_id
+        : `SYS_${crypto.randomUUID()}`;
+
+      const temizMesaj = String(log.mesaj || "").trim().toLowerCase();
+
+      const hash = crypto.createHash('sha256')
+        .update(`${s_id}|${temizMesaj}`)
+        .digest('hex');
+
+      values.push(
+        log.oyuncu_adi || null,
+        s_id,
+        log.ip_adresi || null,
+        log.durum_takim || null,
+        log.yetki || null,
+        String(log.mesaj).substring(0, 512),
+        hash
+      );
+
+      placeholders.push(
+        `($${index++}, $${index++}, $${index++}, $${index++}, $${index++}, $${index++}, $${index++})`
+      );
+    }
+
+    // TEK SORGU → performans
+    const query = `
+      INSERT INTO chat_logs
+      (oyuncu_adi, steam_id, ip_adresi, durum_takim, yetki, mesaj, mesaj_hash)
+      VALUES ${placeholders.join(",")}
+      ON CONFLICT DO NOTHING
+    `;
+
+    await pool.query(query, values);
+
+    res.status(200).json({ success: true });
+
+  } catch (err) {
+    console.error("CHAT LOG HATA:", err.message);
+
+    // SENİN SİSTEME ENTEGRE: mail
+    sendAlertMail("Chat Log Hatası: " + err.message);
+
+    res.status(500).json({ error: "Sistem hatasi" });
+  }
+});
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
   app.listen(PORT, () => {
