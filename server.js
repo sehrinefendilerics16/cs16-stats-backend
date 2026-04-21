@@ -315,7 +315,8 @@ const adminLayout = (title, message, subMessage) => `
   </body></html>`;
 
 app.get("/status", async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
+  // 🛡️ GÜNCELLEME: Şifre artık URL'den değil Header'dan (x-api-key) kontrol ediliyor.
+  if (req.headers['x-api-key'] !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   try {
     const r = await pool.query(`SELECT last_fetch FROM system_log ORDER BY id DESC LIMIT 1`);
     const trDate = r.rows[0]?.last_fetch ? new Date(r.rows[0].last_fetch).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(/\//g, ".") : "Veri yok";
@@ -328,7 +329,8 @@ let lastManualUpdate = 0;
 const UPDATE_COOLDOWN = 5 * 60 * 1000; // 5 dakika bekleme süresi
 
 app.get("/force-update", async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
+  // 🛡️ GÜNCELLEME: Şifre artık URL'den değil Header'dan (x-api-key) kontrol ediliyor.
+  if (req.headers['x-api-key'] !== ADMIN_KEY) return res.status(403).send("Erişim Reddedildi");
   
   const now = Date.now();
   if (now - lastManualUpdate < UPDATE_COOLDOWN) {
